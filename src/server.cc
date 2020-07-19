@@ -16,38 +16,55 @@
 
 namespace kbot {
 
-server::server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
+Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
   : fd(sockfd), address(addr), port(portnum), nickname(nick)
 {}
 
-server::~server()
+Server::~Server()
 {
   close(fd);
 }
 
-const std::string& server::get_address()
+enum ServerState Server::get_state() const
+{
+  return state;
+}
+
+void Server::set_state(enum ServerState state) const
+{
+  std::lock_guard<std::mutex> lock(state_mtx);
+  this->state = state;
+}
+
+const std::string& Server::get_address() const
 {
   return address;
 }
 
-uint16_t server::get_port()
+uint16_t Server::get_port() const
 {
   return port;
 }
 
-const std::string& server::get_nickname()
+const std::string& Server::get_nickname() const
 {
   return nickname;
+}
+
+void Server::set_nickname(std::string_view nickname) const
+{
+  std::lock_guard<std::mutex> lock(nick_mtx);
+  this->nickname = nickname;
 }
 
 namespace {
 
 // Lock held when creating/retrieving connections
-std::mutex conn_mutex;
+std::mutex conn_mtx;
 // Registry map for created connections
-std::unordered_map<std::string, std::weak_ptr<server>> conn_cache;
+std::unordered_map<std::string, std::weak_ptr<Server>> conn_cache;
 
-// Caller must hold the conn_mutex lock
+// Caller must hold the conn_mtx lock
 int connection_fd(const char *addr, const uint16_t port)
 {
   int fd = -1;
@@ -77,12 +94,12 @@ int connection_fd(const char *addr, const uint16_t port)
 
 } // namespace
 
-// Get a shared_ptr to a new or preexisting server object
-std::shared_ptr<server> connection_new(std::string_view address, const uint16_t port, const char *nickname)
+// Get a shared_ptr to a new or preexisting Server object
+std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t port, const char *nickname)
 {
   static size_t _id;
   std::string key(address);
-  std::lock_guard<std::mutex> lock(conn_mutex);
+  std::lock_guard<std::mutex> lock(conn_mtx);
 
   ++_id;
   if (auto it = conn_cache.find(key); it != conn_cache.end()) {
@@ -92,7 +109,7 @@ std::shared_ptr<server> connection_new(std::string_view address, const uint16_t 
       if (fd < 0) {
 	return nullptr;
       }
-      auto sptr = std::shared_ptr<server>(new server(fd, std::move(key), port, nickname), connection_delete);
+      auto sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
       return sptr;
     } else {
@@ -103,16 +120,16 @@ std::shared_ptr<server> connection_new(std::string_view address, const uint16_t 
     if (fd < 0) {
       return nullptr;
     }
-    auto sptr = std::shared_ptr<server>(new server(fd, key, port, nickname), connection_delete);
-    conn_cache[std::move(key)] = std::weak_ptr<server>(sptr);
+    auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
+    conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
     return sptr;
   }
 }
 
-void connection_delete(server *s)
+void connection_delete(Server *s)
 {
   assert(s);
-  std::lock_guard<std::mutex> lock(conn_mutex);
+  std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
   delete s;
 }
