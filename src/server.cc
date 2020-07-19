@@ -18,10 +18,17 @@ namespace kbot {
 
 Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
   : fd(sockfd), address(addr), port(portnum), nickname(nick)
-{}
+{
+  std::clog << "Constructing Server object with credentials:\n"
+	    << "  Address:  " << address << ":" << port << "\n"
+	    << "  Nickname: " << nickname << "\n";
+}
 
 Server::~Server()
 {
+  std::clog << "Destructing Server object with credentials:\n"
+	    << "  Address:  " << address << ":" << port << "\n"
+	    << "  Nickname: " << nickname << "\n";
   close(fd);
 }
 
@@ -102,26 +109,36 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
   std::lock_guard<std::mutex> lock(conn_mtx);
 
   ++_id;
+  auto id_str = [](std::ostream& o) -> std::ostream& { return o << "[Lookup ID=" << _id << "] "; };
+
+  std::clog << id_str << "Initiating cache lookup for " << address << ":" << port << " (" << nickname << ")\n";
   if (auto it = conn_cache.find(key); it != conn_cache.end()) {
     auto& wptr = it->second;
     if (wptr.expired()) {
+      std::clog << id_str << "Server object was erased, recreating...\n";
       auto fd = connection_fd(key.c_str(), port);
       if (fd < 0) {
+	std::clog << id_str << "Failed to create socket fd\n";
 	return nullptr;
       }
       auto sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
+      std::clog << id_str << "Successfully created Server object\n";
       return sptr;
     } else {
+      std::clog << id_str << "Found existing Server object in cache\n";
       return it->second.lock();
     }
   } else {
+    std::clog << id_str << "Server object absent, creating a new object...\n";
     auto fd = connection_fd(key.c_str(), port);
     if (fd < 0) {
+      std::clog << id_str << "Failed to create socket fd\n";
       return nullptr;
     }
     auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
     conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
+    std::clog << id_str << "Successfully created Server object\n";
     return sptr;
   }
 }
@@ -131,6 +148,8 @@ void connection_delete(Server *s)
   assert(s);
   std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
+  std::clog << "Erasing Server object (" << s->get_address() << ":" << s->get_port()
+	    << " [" << s->get_nickname() << "]) from connection cache\n";
   delete s;
 }
 
