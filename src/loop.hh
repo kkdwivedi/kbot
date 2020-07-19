@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cassert>
 #include <mutex>
 #include <deque>
@@ -22,12 +24,12 @@ public:
   ThreadRequest& operator=(const ThreadRequest&) = delete;
   ThreadRequest(ThreadRequest&&) = delete;
   ThreadRequest& operator=(ThreadRequest&&) = delete;
-  void push_back(std::shared_ptr<Server> s) {
+  void push_back(std::shared_ptr<Server> s) const {
     std::lock_guard<std::mutex> lock(vec_mtx);
     req_deq.push_back(std::move(s));
     sem_post(&req_sem);
   }
-  std::shared_ptr<Server> pop_front() {
+  std::shared_ptr<Server> pop_front() const {
     std::lock_guard<std::mutex> lock(vec_mtx);
     assert(req_deq.size());
     auto sptr = std::move(req_deq[0]);

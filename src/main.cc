@@ -10,8 +10,10 @@
 
 [[noreturn]] void usage(void)
 {
-  std::cerr << "Usage: kbot <server> <port> <channel> <nickname>\n";
+  std::cerr << "Usage:   kbot <server> <port> <channel> <nickname>\n";
+  std::cerr << "         kbot -s <server> -p <port> -c <channel> -n <nickname>\n";
   std::cerr << "Example: kbot chat.freenode.net 6667 ##kbot kbot\n";
+  std::cerr << "         kbot -s chat.freenode.net -n kbot -p 6667 -c ##kbot\n";
   std::cerr << "Version " << KBOT_VERSION << " (" << __DATE__ << ", " << __TIME__ << ")\n";
   exit(0);
 }
@@ -56,7 +58,10 @@ int main(int argc, char *argv[])
   }
 
   std::jthread root(kbot::worker_run, ptr);
+  auto id = ptr->join_channel(channel);
+  ptr->send_channel(id, "Hello World!");
   kbot::supervisor_run();
+  ptr->part_channel(id);
   std::clog << "Shutting down...\n";
 
   return 0;

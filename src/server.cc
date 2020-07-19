@@ -12,20 +12,23 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "channel.hh"
+#include "irc.hh"
 #include "server.hh"
 
 namespace kbot {
 
 Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
-  : fd(sockfd), address(addr), port(portnum), nickname(nick)
+  : IRC(sockfd), address(addr), port(portnum), nickname(nick)
 {
-  std::clog << "Constructing Server with credentials:\n" << *this;
+  std::clog << "Constructing Server: " << *this;
+  LOGIN(nickname);
 }
 
 Server::~Server()
 {
-  std::clog << "Destructing Server with credentials:\n" << *this;
-  close(fd);
+  std::clog << "Destructing Server: " << *this;
+  QUIT();
 }
 
 constexpr const char* Server::state_to_string(const enum ServerState state)
@@ -45,11 +48,11 @@ enum ServerState Server::get_state() const
 
 void Server::set_state(const enum ServerState state) const
 {
-  std::clog << "State transition for Server with credentials: ";
+  std::clog << "State transition for Server : ";
   std::lock_guard<std::mutex> lock(state_mtx);
   std::clog << state_to_string(this->state) << " -> " << state_to_string(state);
   this->state = state;
-  std::clog << "\n" << *this;
+  std::clog << "\n " << *this;
 }
 
 const std::string& Server::get_address() const
@@ -71,6 +74,45 @@ void Server::set_nickname(std::string_view nickname) const
 {
   std::lock_guard<std::mutex> lock(nick_mtx);
   this->nickname = nickname;
+}
+
+// Channel API
+
+Server::ChannelID Server::join_channel(std::string channel) {
+  std::lock_guard<std::mutex> lock(chan_mtx);
+  IRC& i = *this;
+  // ircbackend.join(channel) ? ok : return -1;
+  JOIN(channel);
+  ChannelID id = -1;
+  if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
+    id = ++chan_id;
+    std::unique_ptr<Channel> uniq(new Channel(*this, channel, id));
+    chan_id_map.insert({id, std::move(uniq)});
+    chan_string_map.insert({std::move(channel), id});
+  } else {
+    return it->second;
+  }
+  return id;
+}
+
+bool Server::send_channel(ChannelID id, std::string msg)
+{
+  auto it = chan_id_map.find(id);
+  if (it == chan_id_map.end()) {
+    std::clog << "No matching channel found for ID = " << id << '\n';
+    return false;
+  }
+  return !PRIVMSG(it->second->get_name(), msg);
+}
+
+void Server::part_channel(Server::ChannelID id)
+{
+  std::lock_guard<std::mutex> lock(chan_mtx);
+  // ircbackend.part(channel) ? ok (remove map entry) : return;
+  auto& chan_ptr = chan_id_map[id];
+  chan_string_map.erase(chan_ptr->get_name());
+  PART(chan_ptr->get_name());
+  chan_id_map.erase(id);
 }
 
 namespace {
@@ -118,7 +160,7 @@ int connection_fd(const char *addr, const uint16_t port)
 // TODO: the whole approach of dropping the lock is suboptimal and error prone, find an alternative
 
 // Get a shared_ptr to a new or preexisting Server
-std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t port, const char *nickname)
+std::shared_ptr<Server> connection_new(std::string address, const uint16_t port, const char *nickname)
 {
   static size_t _id;
   std::string key(address);
@@ -177,13 +219,13 @@ void connection_delete(const Server *s)
   assert(s);
   std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
-  std::clog << "Erasing Server with credentials from connection cache: \n" << *s;
+  std::clog << "Erasing Server from connection cache: " << *s;
   delete s;
 }
 
 std::ostream& operator<<(std::ostream& o, const Server& s)
 {
-  return o << "  Address:  " << s.address << ":" << s.port << " (" << s.state_to_string(s.state)
+  return o << s.address << ":" << s.port << " (" << s.state_to_string(s.state)
 	   << ")" << " [" << s.nickname << "]\n";
 
 }
