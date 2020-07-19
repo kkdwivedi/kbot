@@ -14,7 +14,7 @@ namespace kbot {
 void worker_run(std::shared_ptr<Server> ptr)
 {
   std::clog << "Main loop for Server: " << *ptr;
-  std::this_thread::sleep_for(1s);
+  std::this_thread::sleep_for(2s);
   kbot::tr.push_back(nullptr);
 }
 

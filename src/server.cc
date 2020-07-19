@@ -91,9 +91,14 @@ int connection_fd(const char *addr, const uint16_t port)
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = 0;
 
+  // Temporarily release lock to allow others to proceed
+  conn_mtx.unlock();
   int r = getaddrinfo(addr, std::to_string(port).c_str(), &hints, &result);
-  if (r != 0)
+  conn_mtx.lock();
+  if (r != 0) {
+    std::clog << "Failed to resolve name: " << gai_strerror(errno) << '\n';
     return fd;
+  }
 
   struct addrinfo *i = result;
   for (; i != nullptr; i = i->ai_next) {
@@ -109,6 +114,8 @@ int connection_fd(const char *addr, const uint16_t port)
 }
 
 } // namespace
+
+// TODO: the whole approach of dropping the lock is suboptimal and error prone, find an alternative
 
 // Get a shared_ptr to a new or preexisting Server
 std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t port, const char *nickname)
@@ -126,11 +133,18 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
     if (wptr.expired()) {
       std::clog << id_str << "Server was erased, recreating...\n";
       auto fd = connection_fd(key.c_str(), port);
+      // Due to releasing lock during the address resolution, possibly another thread succeeded in
+      // creating the entry, in that case we return it, otherwise we know we failed.
+      auto sptr = wptr.lock();
       if (fd < 0) {
+	if (sptr != nullptr) {
+	  std::clog << id_str << "Failed resolution but entry was created, returning\n";
+	  return sptr;
+	}
 	std::clog << id_str << "Failed to create socket fd\n";
-	return nullptr;
+	return sptr;
       }
-      auto sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
+      sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
       std::clog << id_str << "Successfully created Server\n";
       sptr->set_state(ServerState::kConnected);
@@ -143,6 +157,10 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
     std::clog << id_str << "Server absent, creating a new Server...\n";
     auto fd = connection_fd(key.c_str(), port);
     if (fd < 0) {
+      if (auto it = conn_cache.find(key); it != conn_cache.end()) {
+	std::clog << id_str << "Failed resolution but entry was created, returning\n";
+	return it->second.lock();
+      }
       std::clog << id_str << "Failed to create socket fd\n";
       return nullptr;
     }
