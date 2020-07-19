@@ -19,17 +19,23 @@ namespace kbot {
 Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
   : fd(sockfd), address(addr), port(portnum), nickname(nick)
 {
-  std::clog << "Constructing Server object with credentials:\n"
-	    << "  Address:  " << address << ":" << port << "\n"
-	    << "  Nickname: " << nickname << "\n";
+  std::clog << "Constructing Server object with credentials:\n" << *this;
 }
 
 Server::~Server()
 {
-  std::clog << "Destructing Server object with credentials:\n"
-	    << "  Address:  " << address << ":" << port << "\n"
-	    << "  Nickname: " << nickname << "\n";
+  std::clog << "Destructing Server object with credentials:\n" << *this;
   close(fd);
+}
+
+constexpr const char* Server::state_to_string(const enum ServerState state)
+{
+  return ServerStateStringTable[static_cast<int>(state)];
+}
+
+void Server::dump_info() const
+{
+  std::clog << *this;
 }
 
 enum ServerState Server::get_state() const
@@ -37,7 +43,7 @@ enum ServerState Server::get_state() const
   return state;
 }
 
-void Server::set_state(enum ServerState state) const
+void Server::set_state(const enum ServerState state) const
 {
   std::lock_guard<std::mutex> lock(state_mtx);
   this->state = state;
@@ -124,9 +130,10 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
       auto sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
       std::clog << id_str << "Successfully created Server object\n";
+      sptr->set_state(ServerState::kConnected);
       return sptr;
     } else {
-      std::clog << id_str << "Found existing Server object in cache\n";
+      std::clog << id_str << "Found existing Server object in cache, returning\n";
       return it->second.lock();
     }
   } else {
@@ -139,18 +146,25 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
     auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
     conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
     std::clog << id_str << "Successfully created Server object\n";
+    sptr->set_state(ServerState::kConnected);
     return sptr;
   }
 }
 
-void connection_delete(Server *s)
+void connection_delete(const Server *s)
 {
   assert(s);
   std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
-  std::clog << "Erasing Server object (" << s->get_address() << ":" << s->get_port()
-	    << " [" << s->get_nickname() << "]) from connection cache\n";
+  std::clog << "Erasing Server object with credentials:\n" << *s << "from connection cache\n";
   delete s;
+}
+
+std::ostream& operator<<(std::ostream& o, const Server& s)
+{
+  return o << "  Address:  " << s.address << ":" << s.port << " (" << s.state_to_string(s.state)
+	   << ")" << " [" << s.nickname << "]\n";
+
 }
 
 } // namespace kbot

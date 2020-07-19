@@ -12,6 +12,15 @@ enum class ServerState {
   kDisconnected,
   kConnected,
   kFailed,
+  kMax,
+};
+
+constexpr int ServerStateMax = static_cast<int>(ServerState::kMax);
+
+constexpr const char* const ServerStateStringTable[ServerStateMax] = {
+  "Disconnected",
+  "Connected",
+  "Failed",
 };
 
 class Server {
@@ -33,15 +42,20 @@ public:
   Server& operator=(Server&&) = delete;
   ~Server();
 
+  static constexpr const char* state_to_string(const enum ServerState state);
+
+  void dump_info() const;
   enum ServerState get_state() const;
-  void set_state(enum ServerState state) const;
+  void set_state(const enum ServerState state) const;
   const std::string& get_address() const;
   uint16_t get_port() const;
   const std::string& get_nickname() const;
   void set_nickname(std::string_view nickname) const;
+
+  friend std::ostream& operator<<(std::ostream& o, const Server& s);
 };
 
 std::shared_ptr<Server> connection_new(std::string_view, const uint16_t, const char *);
-void connection_delete(Server *);
+void connection_delete(const Server *);
 
 } // namespace kbot
