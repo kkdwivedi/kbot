@@ -19,12 +19,12 @@ namespace kbot {
 Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
   : fd(sockfd), address(addr), port(portnum), nickname(nick)
 {
-  std::clog << "Constructing Server object with credentials:\n" << *this;
+  std::clog << "Constructing Server with credentials:\n" << *this;
 }
 
 Server::~Server()
 {
-  std::clog << "Destructing Server object with credentials:\n" << *this;
+  std::clog << "Destructing Server with credentials:\n" << *this;
   close(fd);
 }
 
@@ -45,8 +45,11 @@ enum ServerState Server::get_state() const
 
 void Server::set_state(const enum ServerState state) const
 {
+  std::clog << "State transition for Server with credentials: ";
   std::lock_guard<std::mutex> lock(state_mtx);
+  std::clog << state_to_string(this->state) << " -> " << state_to_string(state);
   this->state = state;
+  std::clog << "\n" << *this;
 }
 
 const std::string& Server::get_address() const
@@ -107,7 +110,7 @@ int connection_fd(const char *addr, const uint16_t port)
 
 } // namespace
 
-// Get a shared_ptr to a new or preexisting Server object
+// Get a shared_ptr to a new or preexisting Server
 std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t port, const char *nickname)
 {
   static size_t _id;
@@ -121,7 +124,7 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
   if (auto it = conn_cache.find(key); it != conn_cache.end()) {
     auto& wptr = it->second;
     if (wptr.expired()) {
-      std::clog << id_str << "Server object was erased, recreating...\n";
+      std::clog << id_str << "Server was erased, recreating...\n";
       auto fd = connection_fd(key.c_str(), port);
       if (fd < 0) {
 	std::clog << id_str << "Failed to create socket fd\n";
@@ -129,15 +132,15 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
       }
       auto sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
-      std::clog << id_str << "Successfully created Server object\n";
+      std::clog << id_str << "Successfully created Server\n";
       sptr->set_state(ServerState::kConnected);
       return sptr;
     } else {
-      std::clog << id_str << "Found existing Server object in cache, returning\n";
+      std::clog << id_str << "Found existing Server in cache, returning\n";
       return it->second.lock();
     }
   } else {
-    std::clog << id_str << "Server object absent, creating a new object...\n";
+    std::clog << id_str << "Server absent, creating a new Server...\n";
     auto fd = connection_fd(key.c_str(), port);
     if (fd < 0) {
       std::clog << id_str << "Failed to create socket fd\n";
@@ -145,7 +148,7 @@ std::shared_ptr<Server> connection_new(std::string_view address, const uint16_t 
     }
     auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
     conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
-    std::clog << id_str << "Successfully created Server object\n";
+    std::clog << id_str << "Successfully created Server\n";
     sptr->set_state(ServerState::kConnected);
     return sptr;
   }
@@ -156,7 +159,7 @@ void connection_delete(const Server *s)
   assert(s);
   std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
-  std::clog << "Erasing Server object with credentials:\n" << *s << "from connection cache\n";
+  std::clog << "Erasing Server with credentials from connection cache: \n" << *s;
   delete s;
 }
 

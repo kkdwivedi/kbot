@@ -1,7 +1,9 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 
+#include "loop.hh"
 #include "server.hh"
 
 #define KBOT_VERSION "0.1"
@@ -53,9 +55,9 @@ int main(int argc, char *argv[])
     usage();
   }
 
-  int r = -1;
-  if (r < 0)
-    std::cout << "Failed to execute: " << "UNIMPLEMENTED" << '\n';
+  std::jthread root(kbot::worker_run, ptr);
+  kbot::supervisor_run();
+  std::clog << "Shutting down...\n";
 
   return 0;
 }
