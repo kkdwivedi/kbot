@@ -22,6 +22,7 @@ public:
   Server& get_server() {
     return sref;
   };
+  bool send_channel(const std::string& msg);
 };
 
 } // namespace kbot

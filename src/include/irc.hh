@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sys/types.h>
 
@@ -43,6 +44,37 @@ public:
   std::string recv_msg();
   // Friends/Misc
   friend std::ostream& operator<<(std::ostream& o, IRC& i);
+};
+
+struct IRCUser {
+  const std::string nickname;
+  const std::string hostname;
+  const std::string username;
+  const std::string realname;
+};
+
+class IRCMessage {
+  std::string line;
+  std::string_view tags;
+  std::vector<std::pair<std::string_view, std::string_view>> tag_kv;
+  std::string_view source;
+  std::string_view command;
+  std::vector<std::string_view> param_vec;
+public:
+  explicit IRCMessage(std::string_view l);
+  IRCMessage(const IRCMessage&) = delete;
+  IRCMessage& operator=(IRCMessage&) = delete;
+  IRCMessage(IRCMessage&&) = delete;
+  IRCMessage& operator=(IRCMessage&&) = delete;
+  ~IRCMessage() = default;
+  // Query API
+  IRCUser get_user() const;
+  std::string_view get_tags() const;
+  std::vector<std::pair<std::string_view, std::string_view>> get_tag_kv();
+  std::string_view get_command() const;
+  std::string_view get_parameters() const;
+  // Friends/Misc
+  friend std::ostream& operator<<(std::ostream& o, IRCMessage& m);
 };
 
 } // namespace kbot

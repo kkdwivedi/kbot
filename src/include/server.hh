@@ -57,8 +57,8 @@ public:
   const std::string& get_nickname() const;
   void set_nickname(std::string_view nickname) const;
   // Channel API
-  ChannelID join_channel(std::string channel);
-  bool send_channel(ChannelID id, std::string msg);
+  ChannelID join_channel(const std::string& channel);
+  bool send_channel(ChannelID id, const std::string& msg);
   void part_channel(ChannelID id);
   // Friends/Misc
   friend std::ostream& operator<<(std::ostream& o, const Server& s);

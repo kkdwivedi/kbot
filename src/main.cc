@@ -3,8 +3,8 @@
 #include <stdexcept>
 #include <thread>
 
-#include "loop.hh"
-#include "server.hh"
+#include <loop.hh>
+#include <server.hh>
 
 #define KBOT_VERSION "0.1"
 

@@ -1,15 +1,16 @@
 #include <iostream>
 #include <cassert>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <string_view>
-
-#include "irc.hh"
 
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include <irc.hh>
 
 namespace kbot {
 
@@ -122,7 +123,7 @@ std::string IRC::recv_msg()
       if (r) break;
       else return "";
     }
-    r += p;
+    r += static_cast<size_t>(p);
   } while (buf[r-1] != '\n' && tries--);
   // Discard remaining buffer if all tries failed
   if (buf[r-1] != '\n') {
@@ -135,6 +136,81 @@ std::string IRC::recv_msg()
 std::ostream& operator<<(std::ostream& o, IRC& i)
 {
   return o << "Service: " << i.state_to_string(i.service_type) << " (SSL: " << "false" << ")\n";
+}
+
+IRCMessage::IRCMessage(std::string_view l)
+  : line(l.data())
+{
+  char delim = ' ';
+  char *p = std::strtok(line.data(), &delim);
+  if (!p) {
+    std::clog << "Failed parsing TAGS!\n";
+    return;
+  }
+  // TODO: escaping (https://ircv3.net/specs/extensions/message-tags.html)
+  // TODO: escaping tests
+  if (*p == '@') {
+    // Tag prefix
+    tags = ++p;
+    // Process KV pairs
+    while (*p) {
+      // Parse key
+      std::string_view key, val;
+      char *q = strchr(p, '=');
+      if (q) {
+	key = std::string_view(p, static_cast<size_t>(q - p));
+      }
+      else break;
+      // Parse value
+      p = ++q;
+      if (!*p)
+	break;
+      if (*p == ';') {
+	p++;
+	goto push;
+      } else {
+	q = strchrnul(p, ';');
+	val = std::string_view(p, static_cast<size_t>(q - p));
+      }
+      p = *q ? ++q : q;
+    push:
+      tag_kv.push_back({key, val});
+    }
+  } else {
+    // Source prefix
+    tags = "";
+    if (*p == ':') {
+      source = ++p;
+      p = std::strtok(nullptr, &delim);
+    } else source = "";
+    if (!p) {
+      std::clog << "Failed parsing COMMAND!\n";
+      return;
+    }
+    command = p;
+    while ((p = std::strtok(nullptr, &delim))) {
+      param_vec.push_back(p);
+    }
+    if (!p && param_vec.size() == 0) {
+      std::clog << "Failed parsing PARAMETERS!\n";
+      return;
+    }
+  }
+}
+
+std::vector<std::pair<std::string_view, std::string_view>> IRCMessage::get_tag_kv()
+{
+  return tag_kv;
+}
+
+std::ostream& operator<<(std::ostream& o, IRCMessage& m)
+{
+  if (m.tags != "")
+    o << "Tags=" << m.tags << ' ';
+  o << "Source=" << m.source << " Command=" << m.command << " Param=";
+  for (auto& sv : m.param_vec)
+    o << sv << ' ';
+  return o << '\n';
 }
 
 } // namespace kbot

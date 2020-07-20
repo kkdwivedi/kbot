@@ -7,8 +7,8 @@
 
 #include <poll.h>
 
-#include "loop.hh"
-#include "server.hh"
+#include <loop.hh>
+#include <server.hh>
 
 namespace kbot {
 
@@ -24,28 +24,16 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
   return ret;
 }
 
-bool is_server_line(const std::string_view line)
-{
-  return false;
-}
-
-void process_server_msg_line(Server *ptr, std::string_view line)
-{}
-
-void process_user_msg_line(Server *ptr, std::string_view line)
-{}
-
 void process_msg_line(Server *ptr, std::string_view line)
 {
   if (line.substr(0, 4) == "PING") {
     std::clog << "Received PING messge, sending PONG\n";
-    std::clog << " === "<< line << '\n';
     std::string str(line);
     ptr->PONG(str);
   }
-  if (is_server_line(line))
-    process_server_msg_line(ptr, std::move(line));
-  else process_user_msg_line(ptr, std::move(line));
+  IRCMessage m(line);
+  std::clog << " === " << line << '\n';
+  std::clog << " = " << m;
 }
 
 void worker_run(std::shared_ptr<Server> ptr)

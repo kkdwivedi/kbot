@@ -12,9 +12,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "channel.hh"
-#include "irc.hh"
-#include "server.hh"
+#include <channel.hh>
+#include <irc.hh>
+#include <server.hh>
 
 namespace kbot {
 
@@ -78,12 +78,11 @@ void Server::set_nickname(std::string_view nickname) const
 
 // Channel API
 
-Server::ChannelID Server::join_channel(std::string channel) {
+Server::ChannelID Server::join_channel(const std::string& channel) {
   std::lock_guard<std::mutex> lock(chan_mtx);
-  IRC& i = *this;
   // ircbackend.join(channel) ? ok : return -1;
   JOIN(channel);
-  ChannelID id = -1;
+  ChannelID id = SIZE_MAX;
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
     id = ++chan_id;
     std::unique_ptr<Channel> uniq(new Channel(*this, channel, id));
@@ -95,7 +94,7 @@ Server::ChannelID Server::join_channel(std::string channel) {
   return id;
 }
 
-bool Server::send_channel(ChannelID id, std::string msg)
+bool Server::send_channel(ChannelID id, const std::string& msg)
 {
   auto it = chan_id_map.find(id);
   if (it == chan_id_map.end()) {
