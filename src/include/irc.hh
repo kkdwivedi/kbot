@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,7 +52,6 @@ struct IRCUser {
   const std::string nickname;
   const std::string hostname;
   const std::string username;
-  const std::string realname;
 };
 
 class IRCMessage {
@@ -61,20 +62,106 @@ class IRCMessage {
   std::string_view command;
   std::vector<std::string_view> param_vec;
 public:
-  explicit IRCMessage(std::string_view l);
+  explicit IRCMessage(std::string_view l) : line(l)
+  {
+    char delim = ' ';
+    char *p = std::strtok(line.data(), &delim);
+    if (!p) {
+      std::clog << "Failed parsing TAGS!\n";
+      return;
+    }
+    // TODO: escaping (https://ircv3.net/specs/extensions/message-tags.html)
+    if (*p == '@') {
+      // Tag prefix
+      tags = ++p;
+      // Process KV pairs
+      while (*p) {
+	// Parse key
+	std::string_view key, val;
+	char *q = strchr(p, '=');
+	if (q) {
+	  key = std::string_view(p, static_cast<size_t>(q - p));
+	} else break;
+	// Parse value
+	p = ++q;
+	if (!*p) break;
+	if (*p == ';') {
+	  p++;
+	  goto push;
+	} else {
+	  q = strchrnul(p, ';');
+	  val = std::string_view(p, static_cast<size_t>(q - p));
+	}
+	p = *q ? ++q : q;
+      push:
+	tag_kv.push_back({key, val});
+      }
+    } else tags = "";
+    if (tags != "")
+      p = std::strtok(nullptr, &delim);
+    if (*p++ == ':') source = p;
+    else source = "";
+    p = std::strtok(nullptr, &delim);
+    if (!p) {
+      std::clog << "Failed parsing COMMAND!\n";
+      return;
+    }
+    command = p;
+    bool first_semi = false;
+    while ((p = std::strtok(nullptr, &delim))) {
+      if (*p == ':' && !first_semi) p++, first_semi = true;
+      param_vec.push_back(p);
+    }
+    if (!p && param_vec.size() == 0) {
+      std::clog << "Failed parsing PARAMETERS!\n";
+      return;
+    }
+  }
+
   IRCMessage(const IRCMessage&) = delete;
   IRCMessage& operator=(IRCMessage&) = delete;
   IRCMessage(IRCMessage&&) = delete;
   IRCMessage& operator=(IRCMessage&&) = delete;
   ~IRCMessage() = default;
+
   // Query API
   IRCUser get_user() const;
-  std::string_view get_tags() const;
-  std::vector<std::pair<std::string_view, std::string_view>> get_tag_kv();
-  std::string_view get_command() const;
-  std::string_view get_parameters() const;
-  // Friends/Misc
-  friend std::ostream& operator<<(std::ostream& o, IRCMessage& m);
+
+  std::string_view get_tags() const
+  {
+    return tags;
+  }
+
+  const std::vector<std::pair<std::string_view, std::string_view>>& get_tag_kv() const
+  {
+    return tag_kv;
+  }
+
+  std::string_view get_source() const
+  {
+    return source;
+  }
+
+  std::string_view get_command() const
+  {
+    return command;
+  }
+
+  const std::vector<std::string_view>& get_parameters() const
+  {
+    return param_vec;
+  }
+
+  //Friends/Misc
+  friend std::ostream& operator<<(std::ostream& o, IRCMessage& m)
+  {
+    if (m.tags != "")
+      o << "Tags=" << m.tags << ' ';
+    o << "Source=" << m.source << " Command=" << m.command << " Param=";
+    for (auto& sv : m.param_vec)
+      o << sv << ' ';
+    return o << '\n';
+  }
 };
 
 } // namespace kbot

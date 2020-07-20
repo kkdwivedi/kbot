@@ -26,8 +26,10 @@ kbot: setup
 	$(BIN_CXX) $(CFLAGS_DEBUG) -o build/kbot $(FILE_LIST)
 
 kbot_test: setup kbot
+	$(BIN_CXX) $(CFLAGS_DEBUG) $(TEST_LIB) -o $(TESTSDIR)/test_irc_message src/tests/test_irc_message.cc
 
 all_tests_run: setup kbot kbot_test
+	./$(TESTSDIR)/test_irc_message
 
 clean:
 	rm -rf build/
