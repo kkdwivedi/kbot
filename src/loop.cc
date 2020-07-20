@@ -12,9 +12,9 @@
 
 namespace kbot {
 
-std::vector<std::string> tokenize_msg_multi(std::string msg)
+std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 {
-  std::vector<std::string> ret;
+  std::vector<std::string_view> ret;
   char *p = msg.data();
   const char *delim = "\r\n";
   while ((p = std::strtok(p, delim))) {
@@ -24,20 +24,24 @@ std::vector<std::string> tokenize_msg_multi(std::string msg)
   return ret;
 }
 
-bool is_server_line(const std::string& line)
+bool is_server_line(const std::string_view line)
+{
+  return false;
+}
+
+void process_server_msg_line(Server *ptr, std::string_view line)
 {}
 
-void process_server_msg_line(Server *ptr, std::string line)
+void process_user_msg_line(Server *ptr, std::string_view line)
 {}
 
-void process_user_msg_line(Server *ptr, std::string line)
-{}
-
-void process_msg_line(Server *ptr, std::string line)
+void process_msg_line(Server *ptr, std::string_view line)
 {
   if (line.substr(0, 4) == "PING") {
     std::clog << "Received PING messge, sending PONG\n";
-    ptr->PONG(line);
+    std::clog << " === "<< line << '\n';
+    std::string str(line);
+    ptr->PONG(str);
   }
   if (is_server_line(line))
     process_server_msg_line(ptr, std::move(line));
@@ -51,9 +55,9 @@ void worker_run(std::shared_ptr<Server> ptr)
   for (;;) {
     std::string msg(ptr->recv_msg());
     if (msg == "") continue;
-    std::vector<std::string> tok = tokenize_msg_multi(std::move(msg));
+    std::vector<std::string_view> tok = tokenize_msg_multi(msg);
     for (auto& line : tok)
-      process_msg_line(ptr.get(), std::move(line));
+      process_msg_line(ptr.get(), line);
     poll(&pfd, 1, -1);
   }
   kbot::tr.push_back(nullptr);

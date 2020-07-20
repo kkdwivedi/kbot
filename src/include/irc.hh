@@ -45,6 +45,4 @@ public:
   friend std::ostream& operator<<(std::ostream& o, IRC& i);
 };
 
-
-
 } // namespace kbot

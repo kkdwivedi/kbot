@@ -1,0 +1,21 @@
+Priority
+--
+* DESIGN, README
+* IRCMessage object for a tokenised query node
+* Synchronize with a command sent to the server
+* sd_notify/Run as a service
+* Restart without downtime
+* Event loop to integrate various event sources
+
+Future
+--
+* Rethink getaddrinfo
+* Dumpable in-memory DB (or perhaps use sqlite3)
+* CGroup based resource management for plugins (requires delegation)
+* Explore io_uring
+
+Plugins
+--
+* Version
+* GitHub notification subscription
+* Core API control for admins

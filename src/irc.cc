@@ -101,7 +101,7 @@ ssize_t IRC::QUIT(const std::string& msg)
 
 ssize_t IRC::send_msg(std::string_view msg)
 {
-  auto r = send(fd, msg.data(), msg.size()+1, MSG_NOSIGNAL);
+  auto r = send(fd, msg.data(), msg.size(), MSG_NOSIGNAL);
   if (r < 0) {
     std::clog << "Failed to send data: " << strerror(errno) << '\n';
   }
