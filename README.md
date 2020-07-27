@@ -5,7 +5,7 @@ resource management for plugins, zero downtime restarts, and the ability to serv
 and channels at once. It is written in C++20 and only supports Linux.
 
 
-Contact: Kumar Karitkeya Dwivedi <memxor@gmail.com>
+Contact: Kumar Kartikeya Dwivedi <memxor@gmail.com>
 
 
 LICENSE: MIT

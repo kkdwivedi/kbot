@@ -4,13 +4,33 @@
 #include <string_view>
 #include <vector>
 #include <thread>
+#include <unordered_map>
 
 #include <poll.h>
 
+#include <irc.hh>
 #include <loop.hh>
 #include <server.hh>
 
 namespace kbot {
+
+namespace {
+
+void cb_pong(const Server& s, const IRCMessage& m)
+{
+  std::clog << "Received PING, replying with PONG to " << m.get_parameters()[0];
+  s.send_msg("PONG: " + std::string(m.get_parameters()[0]));
+}
+
+void cb_privmsg(const Server& s, const IRCMessage& m)
+{
+  if (m.get_parameters()[0] == "##kbot")
+    if (m.get_source().substr(0, 3) == "kkd")
+      if (m.get_parameters()[1].substr(0, 3) == ",hi")
+	s.PRIVMSG("##kbot", "Hey buddy!");
+}
+
+}
 
 std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 {
@@ -24,29 +44,33 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
   return ret;
 }
 
-void process_msg_line(Server *ptr, std::string_view line)
+bool process_msg_line(Server *ptr, std::string_view line)
 {
-  if (line.substr(0, 4) == "PING") {
-    std::clog << "Received PING messge, sending PONG\n";
-    std::string str(line);
-    ptr->PONG(str);
-  }
   IRCMessage m(line);
   std::clog << " === " << line << '\n';
-  std::clog << " = " << m;
+  std::clog << " === " << m;
+  if (m.get_command() == "PING")
+    cb_pong(*ptr, m);
+  else if (m.get_command() == "PRIVMSG") {
+    if (m.get_parameters()[1].substr(0, 5) == ",quit")
+      return false;
+    cb_privmsg(*ptr, m);
+  }
+  return true;
 }
 
 void worker_run(std::shared_ptr<Server> ptr)
 {
   std::clog << "Main loop for Server: " << *ptr;
   struct pollfd pfd = { .fd = ptr->fd, .events = POLLIN };
-  for (;;) {
+  for (bool r = true; r;) {
+    poll(&pfd, 1, -1);
     std::string msg(ptr->recv_msg());
     if (msg == "") continue;
     std::vector<std::string_view> tok = tokenize_msg_multi(msg);
-    for (auto& line : tok)
-      process_msg_line(ptr.get(), line);
-    poll(&pfd, 1, -1);
+    for (auto& line : tok) {
+      r = process_msg_line(ptr.get(), line);
+    }
   }
   kbot::tr.push_back(nullptr);
 }

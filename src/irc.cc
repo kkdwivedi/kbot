@@ -30,15 +30,7 @@ constexpr const char* IRC::state_to_string(enum IRCService s)
   return IRCServiceStringTable[static_cast<int>(s)];
 }
 
-ssize_t IRC::PONG(std::string& pingmsg)
-{
-  auto r = send_msg(pingmsg.replace(1, 2, "O"));
-  if (r < 0)
-    std::clog << "Failed to send PONG message: " << strerror(errno) << '\n';
-  return r;
-}
-
-ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password)
+ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password) const
 {
   ssize_t fail = 0;
   auto r = send_msg("\rUSER " + nickname + " 0 * :" + nickname + "\r\n");
@@ -60,7 +52,7 @@ ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password)
   return fail;
 }
 
-ssize_t IRC::NICK(const std::string& nickname)
+ssize_t IRC::NICK(const std::string& nickname) const
 {
   auto r = send_msg("\rNICK " + nickname + "\r\n");
   if (r < 0)
@@ -68,7 +60,7 @@ ssize_t IRC::NICK(const std::string& nickname)
   return r;
 }
 
-ssize_t IRC::JOIN(const std::string& channel)
+ssize_t IRC::JOIN(const std::string& channel) const
 {
   auto r = send_msg("\rJOIN " + channel + "\r\n");
   if (r < 0)
@@ -76,7 +68,7 @@ ssize_t IRC::JOIN(const std::string& channel)
   return r;
 }
 
-ssize_t IRC::PART(const std::string& channel)
+ssize_t IRC::PART(const std::string& channel) const
 {
   auto r = send_msg("\rPART " + channel + "\r\n");
   if (r < 0)
@@ -84,7 +76,7 @@ ssize_t IRC::PART(const std::string& channel)
   return r;
 }
 
-ssize_t IRC::PRIVMSG(const std::string& recipient, const std::string& msg)
+ssize_t IRC::PRIVMSG(const std::string& recipient, const std::string& msg) const
 {
   auto r = send_msg("\rPRIVMSG " + recipient + " :" + msg + "\r\n");
   if (r < 0)
@@ -92,7 +84,7 @@ ssize_t IRC::PRIVMSG(const std::string& recipient, const std::string& msg)
   return r;
 }
 
-ssize_t IRC::QUIT(const std::string& msg)
+ssize_t IRC::QUIT(const std::string& msg) const
 {
   auto r = send_msg("\rQUIT :" + msg + "\r\n");
   if (r < 0)
@@ -100,7 +92,7 @@ ssize_t IRC::QUIT(const std::string& msg)
   return r;
 }
 
-ssize_t IRC::send_msg(std::string_view msg)
+ssize_t IRC::send_msg(std::string_view msg) const
 {
   auto r = send(fd, msg.data(), msg.size(), MSG_NOSIGNAL);
   if (r < 0) {
@@ -109,7 +101,7 @@ ssize_t IRC::send_msg(std::string_view msg)
   return r;
 }
 
-std::string IRC::recv_msg()
+std::string IRC::recv_msg() const
 {
   std::string buf;
   size_t r = 0;
