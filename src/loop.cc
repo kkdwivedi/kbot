@@ -18,19 +18,23 @@ namespace {
 
 void cb_pong(const Server& s, const IRCMessage& m)
 {
-  std::clog << "Received PING, replying with PONG to " << m.get_parameters()[0];
-  s.send_msg("PONG: " + std::string(m.get_parameters()[0]));
+  std::clog << "Received PING, replying with PONG to " << m.get_parameters()[0] << '\n';
+  s.send_msg("PONG: " + std::string(m.get_parameters()[0].substr(1, std::string::npos)));
 }
 
 void cb_privmsg(const Server& s, const IRCMessage& m)
 {
   if (m.get_parameters()[0] == "##kbot")
-    if (m.get_source().substr(0, 3) == "kkd")
-      if (m.get_parameters()[1].substr(0, 3) == ",hi")
-	s.PRIVMSG("##kbot", "Hey buddy!");
+    if (m.get_parameters()[1].substr(0, 4) == ":,hi")
+      s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
 }
 
-}
+} // namespace
+
+std::unordered_map<std::string_view, void(*)(const Server&, const IRCMessage&)> callback_map = {
+  { "PING", cb_pong },
+  { "PRIVMSG", cb_privmsg },
+};
 
 std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 {
@@ -44,19 +48,24 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
   return ret;
 }
 
-bool process_msg_line(Server *ptr, std::string_view line)
+bool process_msg_line(Server *ptr, std::string_view line) try
 {
-  IRCMessage m(line);
-  std::clog << " === " << line << '\n';
+  const IRCMessage m(line);
   std::clog << " === " << m;
-  if (m.get_command() == "PING")
-    cb_pong(*ptr, m);
-  else if (m.get_command() == "PRIVMSG") {
-    if (m.get_parameters()[1].substr(0, 5) == ",quit")
+  if (m.get_command() == "PRIVMSG") {
+    if (m.get_parameters()[1].substr(0, 6) == ":,quit")
       return false;
-    cb_privmsg(*ptr, m);
+  }
+  auto it = callback_map.find(m.get_command());
+  if (it != callback_map.end()) {
+    std::clog << "Command found ... Dispatching callback.\n";
+    assert(it->second != nullptr);
+    it->second(*ptr, m);
   }
   return true;
+} catch (std::runtime_error&) {
+  std::clog << "Caught IRCMessage exception\n";
+  return false;
 }
 
 void worker_run(std::shared_ptr<Server> ptr)

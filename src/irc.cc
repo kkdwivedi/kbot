@@ -30,10 +30,16 @@ constexpr const char* IRC::state_to_string(enum IRCService s)
   return IRCServiceStringTable[static_cast<int>(s)];
 }
 
-ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password) const
+ssize_t IRC::LOGIN(std::string_view nickname, std::string_view password) const
 {
   ssize_t fail = 0;
-  auto r = send_msg("\rUSER " + nickname + " 0 * :" + nickname + "\r\n");
+  std::string buf;
+  buf += "\rUSER ";
+  buf += nickname;
+  buf += " 0 * :";
+  buf += "nickname";
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0) {
     std::clog << "Failed to send USER LOGIN message: " << strerror(errno) << '\n';
     fail = r;
@@ -44,7 +50,7 @@ ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password) con
     fail = r;
   }
   if (password != "") {
-    r = PRIVMSG("NickServ", "identify " + password);
+    r = PRIVMSG("NickServ", std::string("identify ") += password);
     if (r < 0)
       std::clog << "Failed to send IDENTIFY LOGIN message: " << strerror(errno) << '\n';
     fail = r;
@@ -52,41 +58,63 @@ ssize_t IRC::LOGIN(const std::string& nickname, const std::string& password) con
   return fail;
 }
 
-ssize_t IRC::NICK(const std::string& nickname) const
+ssize_t IRC::NICK(std::string_view nickname) const
 {
-  auto r = send_msg("\rNICK " + nickname + "\r\n");
+  std::string buf;
+  buf += "\rNICK ";
+  buf += nickname;
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0)
     std::clog << "Failed to send NICK message: " << strerror(errno) << '\n';
   return r;
 }
 
-ssize_t IRC::JOIN(const std::string& channel) const
+ssize_t IRC::JOIN(std::string_view channel) const
 {
-  auto r = send_msg("\rJOIN " + channel + "\r\n");
+  std::string buf;
+  buf += "\rJOIN ";
+  buf += channel;
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0)
     std::clog << "Failed to send JOIN message: " << strerror(errno) << '\n';
   return r;
 }
 
-ssize_t IRC::PART(const std::string& channel) const
+ssize_t IRC::PART(std::string_view channel) const
 {
-  auto r = send_msg("\rPART " + channel + "\r\n");
+  std::string buf;
+  buf += "\rPART ";
+  buf += channel;
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0)
     std::clog << "Failed to send PART message: " << strerror(errno) << '\n';
   return r;
 }
 
-ssize_t IRC::PRIVMSG(const std::string& recipient, const std::string& msg) const
+ssize_t IRC::PRIVMSG(std::string_view recipient, std::string_view msg) const
 {
-  auto r = send_msg("\rPRIVMSG " + recipient + " :" + msg + "\r\n");
+  std::string buf;
+  buf += "\rPRIVMSG ";
+  buf += recipient;
+  buf += " :";
+  buf += msg;
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0)
     std::clog << "Failed to send PRIVMSG message: " << strerror(errno) << '\n';
   return r;
 }
 
-ssize_t IRC::QUIT(const std::string& msg) const
+ssize_t IRC::QUIT(std::string_view msg) const
 {
-  auto r = send_msg("\rQUIT :" + msg + "\r\n");
+  std::string buf;
+  buf += "\rQUIT :";
+  buf += msg;
+  buf += "\r\n";
+  auto r = send_msg(buf);
   if (r < 0)
     std::clog << "Failed to send QUIT message: " << strerror(errno) << '\n';
   return r;
@@ -125,7 +153,7 @@ std::string IRC::recv_msg() const
   return buf;
 }
 
-std::ostream& operator<<(std::ostream& o, IRC& i)
+std::ostream& operator<<(std::ostream& o, const IRC& i)
 {
   return o << "Service: " << i.state_to_string(i.service_type) << " (SSL: " << "false" << ")\n";
 }

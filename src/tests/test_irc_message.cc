@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -28,6 +29,18 @@ TEST(IRCMessage, TagParsing1)
   ASSERT_EQ(tag_kv[0].second, "");
   ASSERT_EQ(tag_kv[1].first, "netsplit");
   ASSERT_EQ(tag_kv[1].second, "tur,ty");
+}
+
+TEST(IRCMessage, BadMessage)
+{
+  ASSERT_THROW(kbot::IRCMessage(""), std::runtime_error);
+  ASSERT_THROW(kbot::IRCMessage("@url="), std::runtime_error);
+  ASSERT_THROW(kbot::IRCMessage("@url"), std::runtime_error);
+  ASSERT_THROW(kbot::IRCMessage(":source_no_command"), std::runtime_error);
+  ASSERT_THROW(kbot::IRCMessage(":source command_no_parameters"), std::runtime_error);
+  ASSERT_NO_THROW(kbot::IRCMessage("command pa ra me te rs"));
+  ASSERT_NO_THROW(kbot::IRCMessage(":source command pa ra me te rs"));
+  ASSERT_NO_THROW(kbot::IRCMessage("@key=val;key= :source command pa ra me te rs"));
 }
 
 int main()

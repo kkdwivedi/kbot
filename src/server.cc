@@ -22,13 +22,13 @@ Server::Server(const int sockfd, const std::string addr, const uint16_t portnum,
   : IRC(sockfd), address(addr), port(portnum), nickname(nick)
 {
   std::clog << "Constructing Server: " << *this;
-  LOGIN(nickname);
+  IRC::LOGIN(nickname);
 }
 
 Server::~Server()
 {
   std::clog << "Destructing Server: " << *this;
-  QUIT();
+  IRC::QUIT();
 }
 
 constexpr const char* Server::state_to_string(const enum ServerState state)
@@ -48,7 +48,7 @@ enum ServerState Server::get_state() const
 
 void Server::set_state(const enum ServerState state) const
 {
-  std::clog << "State transition for Server : ";
+  std::clog << "State transition for Server: ";
   std::lock_guard<std::mutex> lock(state_mtx);
   std::clog << state_to_string(this->state) << " -> " << state_to_string(state);
   this->state = state;
@@ -73,6 +73,11 @@ const std::string& Server::get_nickname() const
 void Server::set_nickname(std::string_view nickname) const
 {
   std::lock_guard<std::mutex> lock(nick_mtx);
+  auto r = IRC::NICK(nickname.data());
+  if (r < 0) {
+    std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
+    return;
+  }
   this->nickname = nickname;
 }
 
@@ -80,9 +85,12 @@ void Server::set_nickname(std::string_view nickname) const
 
 Server::ChannelID Server::join_channel(const std::string& channel) {
   std::lock_guard<std::mutex> lock(chan_mtx);
-  // ircbackend.join(channel) ? ok : return -1;
-  JOIN(channel);
   ChannelID id = SIZE_MAX;
+  auto r = IRC::JOIN(channel);
+  if (r < 0) {
+    std::clog << "Failed to JOIN channel: " << channel << '\n';
+    return id;
+  }
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
     id = ++chan_id;
     std::unique_ptr<Channel> uniq(new Channel(*this, channel, id));
@@ -97,20 +105,22 @@ Server::ChannelID Server::join_channel(const std::string& channel) {
 bool Server::send_channel(ChannelID id, const std::string& msg)
 {
   auto it = chan_id_map.find(id);
-  if (it == chan_id_map.end()) {
-    std::clog << "No matching channel found for ID = " << id << '\n';
-    return false;
-  }
+  assert(it != chan_id_map.end());
   return !PRIVMSG(it->second->get_name(), msg);
 }
 
 void Server::part_channel(Server::ChannelID id)
 {
   std::lock_guard<std::mutex> lock(chan_mtx);
-  // ircbackend.part(channel) ? ok (remove map entry) : return;
-  auto& chan_ptr = chan_id_map[id];
-  chan_string_map.erase(chan_ptr->get_name());
-  PART(chan_ptr->get_name());
+  auto it = chan_id_map.find(id);
+  assert(it != chan_id_map.end());
+  auto& chan_str = it->second->get_name();
+  auto r = IRC::PART(chan_str);
+  if (r < 0) {
+    std::clog << "Failed to PART channel: " << chan_str << '\n';
+    return;
+  }
+  chan_string_map.erase(chan_str);
   chan_id_map.erase(id);
 }
 

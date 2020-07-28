@@ -36,23 +36,23 @@ public:
   // Static Methods
   static constexpr const char* state_to_string(const enum IRCService s);
   // Command API
-  ssize_t LOGIN(const std::string& nickname, const std::string& password = "") const;
-  ssize_t NICK(const std::string& nickname) const;
-  ssize_t JOIN(const std::string& channel) const;
-  ssize_t PART(const std::string& channel) const;
-  ssize_t PRIVMSG(const std::string& recipient, const std::string& msg) const;
-  ssize_t QUIT(const std::string& msg = "") const;
+  ssize_t LOGIN(std::string_view nickname, std::string_view password = "") const;
+  ssize_t NICK(std::string_view nickname) const;
+  ssize_t JOIN(std::string_view channel) const;
+  ssize_t PART(std::string_view channel) const;
+  ssize_t PRIVMSG(std::string_view recipient, std::string_view msg) const;
+  ssize_t QUIT(std::string_view msg = "") const;
   // Low-level API
   ssize_t send_msg(std::string_view msg) const;
   std::string recv_msg() const;
   // Friends/Misc
-  friend std::ostream& operator<<(std::ostream& o, IRC& i);
+  friend std::ostream& operator<<(std::ostream& o, const IRC& i);
 };
 
 struct IRCUser {
-  const std::string nickname;
-  const std::string hostname;
-  const std::string username;
+  std::string_view nickname;
+  std::string_view hostname;
+  std::string_view username;
 };
 
 class IRCMessage {
@@ -84,8 +84,8 @@ public:
 	if (i == tags.npos)
 	  break;
 	else prev = i + 1;
-	if (!prev) throw "Malformed tag";
       }
+      if (!prev) throw "Malformed tag";
     }
     if (line[i] == ':') {
       prev = i + 1;
@@ -102,6 +102,8 @@ public:
 	throw "No parameter present";
       }
       command = std::string_view(&line[prev], &line[i++]);
+      if (command == "")
+	throw "No command present";
     }
     prev = i;
     while ((i = line.find(' ', prev)) != line.npos) {
@@ -109,6 +111,11 @@ public:
       prev = i + 1;
     }
     param_vec.push_back(std::string_view(&line[prev]));
+    if (param_vec.size() == 0 || param_vec[0] == "")
+      throw "Bad parameter present";
+    line.shrink_to_fit();
+    param_vec.shrink_to_fit();
+    tag_kv.shrink_to_fit();
   } catch (const char *e) {
     std::clog << "Failure: " << e << " (" << l << ')' << '\n';
     throw std::runtime_error("IRCMessage parsing error");
@@ -123,7 +130,21 @@ public:
   // Query API
   IRCUser get_user() const
   {
-    return {};
+    if (source.find('.') == source.npos) {
+      IRCUser u;
+      size_t src_size = source.size();
+      size_t cur = 0;
+      size_t next = std::min(source.find('!', cur), src_size);
+      u.nickname = std::string_view(&source[cur], &source[next]);
+      cur = next == src_size ? next : next + 2;
+      next = std::min(source.find('@', next), src_size);
+      u.username = std::string_view(&source[cur], &source[next]);
+      cur = next == src_size ? next : next + 1;
+      next = src_size;
+      u.hostname = std::string_view(&source[cur], &source[next]);
+      return u;
+    }
+    throw std::runtime_error("Source is not a user");
   }
 
   std::string_view get_tags() const
