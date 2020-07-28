@@ -101,11 +101,11 @@ public:
   const std::string& get_name()
   {
     return name;
-  };
+  }
   std::size_t get_id()
   {
     return id;
-  };
+  }
   bool send_msg(std::string_view msg);
   std::string get_topic();
   bool set_topic(std::string_view topic);

@@ -131,16 +131,21 @@ public:
   IRCUser get_user() const
   {
     if (source.find('.') == source.npos) {
-      IRCUser u;
+      IRCUser u = {};
       size_t src_size = source.size();
       size_t cur = 0;
       size_t next = std::min(source.find('!', cur), src_size);
+      assert(cur <= next);
       u.nickname = std::string_view(&source[cur], &source[next]);
-      cur = next == src_size ? next : next + 2;
+      if (next == src_size) return u;
+      cur = next + 1;
       next = std::min(source.find('@', next), src_size);
+      assert(cur <= next);
       u.username = std::string_view(&source[cur], &source[next]);
-      cur = next == src_size ? next : next + 1;
+      if (next == src_size) return u;
+      cur = next + 1;
       next = src_size;
+      assert(cur <= next);
       u.hostname = std::string_view(&source[cur], &source[next]);
       return u;
     }

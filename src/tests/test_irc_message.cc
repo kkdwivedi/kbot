@@ -31,7 +31,7 @@ TEST(IRCMessage, TagParsing1)
   ASSERT_EQ(tag_kv[1].second, "tur,ty");
 }
 
-TEST(IRCMessage, BadMessage)
+TEST(IRCMessage, BadMessage1)
 {
   ASSERT_THROW(kbot::IRCMessage(""), std::runtime_error);
   ASSERT_THROW(kbot::IRCMessage("@url="), std::runtime_error);
@@ -41,6 +41,26 @@ TEST(IRCMessage, BadMessage)
   ASSERT_NO_THROW(kbot::IRCMessage("command pa ra me te rs"));
   ASSERT_NO_THROW(kbot::IRCMessage(":source command pa ra me te rs"));
   ASSERT_NO_THROW(kbot::IRCMessage("@key=val;key= :source command pa ra me te rs"));
+}
+
+TEST(IRCMessage, UserRecord1)
+{
+  const kbot::IRCMessage m(":dan!~d@localhost/foo command param");
+  auto u = m.get_user();
+  ASSERT_EQ(u.nickname, "dan");
+  ASSERT_EQ(u.username, "~d");
+  ASSERT_EQ(u.hostname, "localhost/foo");
+  ASSERT_THROW(kbot::IRCMessage(":source. command param").get_user(), std::runtime_error);
+  const kbot::IRCMessage m1(":dan!~d command param");
+  ASSERT_EQ(m1.get_user().nickname, "dan");
+  ASSERT_EQ(m1.get_user().username, "~d");
+  ASSERT_EQ(m1.get_user().hostname, "");
+  const kbot::IRCMessage m2(":dan! command param");
+  ASSERT_EQ(m2.get_user().nickname, "dan");
+  ASSERT_EQ(m2.get_user().username, "");
+  ASSERT_EQ(m2.get_user().hostname, "");
+  ASSERT_EQ(kbot::IRCMessage(":dan command param").get_user().username, m2.get_user().username);
+  ASSERT_EQ(kbot::IRCMessage(":dan!~d@ command param").get_user().hostname, m2.get_user().hostname);
 }
 
 int main()
