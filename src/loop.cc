@@ -29,12 +29,37 @@ void cb_privmsg(const Server& s, const IRCMessage& m)
       s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
 }
 
-} // namespace
-
-std::unordered_map<std::string_view, void(*)(const Server&, const IRCMessage&)> callback_map = {
+// Map of callbacks for each command
+std::unordered_map<std::string_view, callback_t> callback_map = {
   { "PING", cb_pong },
   { "PRIVMSG", cb_privmsg },
 };
+
+} // namespace
+
+// Mutex held during insertion/deletion
+std::recursive_mutex callback_map_mtx;
+
+bool add_callback(std::string_view command, callback_t cb_ptr)
+{
+  assert(cb_ptr != nullptr);
+  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
+  auto [_, b] = callback_map.insert({command, cb_ptr});
+  return b;
+}
+
+callback_t get_callback(std::string_view command)
+{
+  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
+  auto it = callback_map.find(command);
+  return it == callback_map.end() ? nullptr : it->second;
+}
+
+bool del_callback(std::string_view command)
+{
+  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
+  return !!callback_map.erase(command);
+}
 
 std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 {
@@ -50,17 +75,17 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 
 bool process_msg_line(Server *ptr, std::string_view line) try
 {
+  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
   const IRCMessage m(line);
   std::clog << " === " << m;
   if (m.get_command() == "PRIVMSG") {
     if (m.get_parameters()[1].substr(0, 6) == ":,quit")
       return false;
   }
-  auto it = callback_map.find(m.get_command());
-  if (it != callback_map.end()) {
+  auto cb = get_callback(m.get_command());
+  if (cb != nullptr) {
     std::clog << "Command found ... Dispatching callback.\n";
-    assert(it->second != nullptr);
-    it->second(*ptr, m);
+    cb(*ptr, m);
   }
   return true;
 } catch (std::runtime_error&) {

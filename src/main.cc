@@ -60,6 +60,7 @@ int main(int argc, char *argv[])
   std::jthread root(kbot::worker_run, ptr);
   auto id = ptr->join_channel(channel);
   ptr->send_channel(id, "Hello World!");
+  ptr->dump_info();
   kbot::supervisor_run();
   ptr->part_channel(id);
   std::clog << "Shutting down...\n";

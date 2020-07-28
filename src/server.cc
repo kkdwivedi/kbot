@@ -12,11 +12,19 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <channel.hh>
 #include <irc.hh>
 #include <server.hh>
 
 namespace kbot {
+
+// Channel
+
+bool Channel::send_msg(std::string_view msg)
+{
+  return !!sref.PRIVMSG(name, msg);
+}
+
+// Server
 
 Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
   : IRC(sockfd), address(addr), port(portnum), nickname(nick)
@@ -38,7 +46,20 @@ constexpr const char* Server::state_to_string(const enum ServerState state)
 
 void Server::dump_info() const
 {
-  std::clog << *this;
+  std::clog << "=== DUMP FOR SERVER ===\n";
+  std::clog << " Address  : " << address << ':' << port << '\n';
+  {
+    std::lock_guard<std::mutex> lock(nick_mtx);
+    std::clog << " Nickname : " << nickname << '\n';
+  }
+  std::lock_guard<std::mutex> lock(chan_mtx);
+  std::clog << " Channels : " << chan_id_map.size() << "\n ---\n";
+  for (auto& p : chan_id_map) {
+    std::clog << "  Name  : " << p.second->get_name() << '\n';
+    // std::clog << "  Topic : " << p.second->get_topic() << '\n';
+    std::clog << " ---\n";
+  }
+  std::clog << "=== END OF DUMP ===\n";
 }
 
 enum ServerState Server::get_state() const
@@ -67,6 +88,7 @@ uint16_t Server::get_port() const
 
 const std::string& Server::get_nickname() const
 {
+  std::lock_guard<std::mutex> lock(nick_mtx);
   return nickname;
 }
 
@@ -86,12 +108,12 @@ void Server::set_nickname(std::string_view nickname) const
 Server::ChannelID Server::join_channel(const std::string& channel) {
   std::lock_guard<std::mutex> lock(chan_mtx);
   ChannelID id = SIZE_MAX;
-  auto r = IRC::JOIN(channel);
-  if (r < 0) {
-    std::clog << "Failed to JOIN channel: " << channel << '\n';
-    return id;
-  }
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
+    auto r = IRC::JOIN(channel);
+    if (r < 0) {
+      std::clog << "Failed to JOIN channel: " << channel << '\n';
+      return id;
+    }
     id = ++chan_id;
     std::unique_ptr<Channel> uniq(new Channel(*this, channel, id));
     chan_id_map.insert({id, std::move(uniq)});
@@ -102,11 +124,12 @@ Server::ChannelID Server::join_channel(const std::string& channel) {
   return id;
 }
 
-bool Server::send_channel(ChannelID id, const std::string& msg)
+bool Server::send_channel(ChannelID id, const std::string_view msg)
 {
+  std::lock_guard<std::mutex> lock(chan_mtx);
   auto it = chan_id_map.find(id);
   assert(it != chan_id_map.end());
-  return !PRIVMSG(it->second->get_name(), msg);
+  return it->second->send_msg(msg);
 }
 
 void Server::part_channel(Server::ChannelID id)

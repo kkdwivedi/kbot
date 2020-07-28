@@ -47,4 +47,12 @@ inline ThreadRequest tr;
 void worker_run(std::shared_ptr<Server> ptr);
 void supervisor_run();
 
+using callback_t = void(*)(const Server& s, const IRCMessage& m);
+
+extern std::recursive_mutex callback_map_mtx;
+
+bool add_callback(std::string_view command, callback_t cb_ptr);
+callback_t get_callback(std::string_view command);
+bool del_callback(std::string_view command);
+
 } // namespace kbot
