@@ -1,7 +1,6 @@
 Priority
 --
 * DESIGN, README
-* IRCMessage object for a tokenised query node
 * Synchronize with a command sent to the server
 * sd_notify/Run as a service
 * Restart without downtime
