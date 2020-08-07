@@ -92,6 +92,12 @@ const std::string& Server::get_nickname() const
   return nickname;
 }
 
+void Server::update_nickname(std::string_view nickname) const
+{
+  std::lock_guard<std::mutex> lock(nick_mtx);
+  this->nickname = nickname;
+}
+
 void Server::set_nickname(std::string_view nickname) const
 {
   std::lock_guard<std::mutex> lock(nick_mtx);
@@ -100,7 +106,7 @@ void Server::set_nickname(std::string_view nickname) const
     std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
     return;
   }
-  this->nickname = nickname;
+  // The callback to update_nickname will reflect the change
 }
 
 // Channel API

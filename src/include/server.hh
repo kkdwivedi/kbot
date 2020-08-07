@@ -76,6 +76,7 @@ public:
   const std::string& get_address() const;
   uint16_t get_port() const;
   const std::string& get_nickname() const;
+  void update_nickname(std::string_view nickname) const;
   void set_nickname(std::string_view nickname) const;
   // Channel API
   ChannelID join_channel(const std::string& channel);

@@ -12,6 +12,13 @@
 
 namespace kbot {
 
+enum IRCUserCapability : uint64_t {
+  kQuit = (1ULL << 0),
+  kPart = (1ULL << 1),
+  kJoin = (1ULL << 2),
+  kMax = UINT64_MAX,
+};
+
 enum class IRCService {
   kAtheme,
   kMax,
@@ -188,5 +195,38 @@ public:
     return o << '\n';
   }
 };
+
+// Predicates
+
+namespace message {
+
+inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask)
+{
+  // TODO: store admins to a persistent DB
+  static uint64_t kkd_cap_mask = UINT64_MAX;
+  if (u.nickname == "kkd" && u.username == "memxor" && u.hostname == "unaffiliated/kartikeya") {
+    if ((kkd_cap_mask & cap_mask) != 0)
+      return true;
+  }
+  return false;
+}
+
+inline bool is_server_message(std::string_view source)
+{
+  if (source.find('.') != source.npos)
+    return false;
+  return true;
+}
+
+inline bool is_message_quit(const IRCMessage& m)
+{
+  if (is_server_message(m.get_source()))
+    return false;
+  if (is_user_capable(m.get_user(), kQuit))
+    return true;
+  return false;
+}
+
+} // namespace message
 
 } // namespace kbot

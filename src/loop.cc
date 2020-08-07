@@ -29,10 +29,20 @@ void cb_privmsg(const Server& s, const IRCMessage& m)
       s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
 }
 
+void cb_nickname(const Server& s, const IRCMessage& m)
+{
+  auto u = m.get_user();
+  std::clog << "Noticed nickname change\n";
+  if (u.nickname == s.get_nickname()) {
+    s.update_nickname(m.get_parameters()[0].substr(1));
+  }
+}
+
 // Map of callbacks for each command
 std::unordered_map<std::string_view, callback_t> callback_map = {
   { "PING", cb_pong },
   { "PRIVMSG", cb_privmsg },
+  { "NICK", cb_nickname },
 };
 
 } // namespace
@@ -78,10 +88,9 @@ bool process_msg_line(Server *ptr, std::string_view line) try
   std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
   const IRCMessage m(line);
   std::clog << " === " << m;
-  if (m.get_command() == "PRIVMSG") {
-    if (m.get_parameters()[1].substr(0, 6) == ":,quit")
-      return false;
-  }
+  // Handle termination as early as possible
+  if (message::is_message_quit(m))
+    return false;
   auto cb = get_callback(m.get_command());
   if (cb != nullptr) {
     std::clog << "Command found ... Dispatching callback.\n";
