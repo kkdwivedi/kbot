@@ -1,6 +1,6 @@
 Priority
 --
-* DESIGN, README
+* Option parsing
 * Synchronize with a command sent to the server
 * sd_notify/Run as a service
 * Restart without downtime

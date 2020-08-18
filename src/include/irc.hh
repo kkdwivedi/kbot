@@ -137,7 +137,7 @@ public:
   // Query API
   IRCUser get_user() const
   {
-    if (source.find('.') == source.npos) {
+    if (source.find('!') != source.npos) {
       IRCUser u = {};
       size_t src_size = source.size();
       size_t cur = 0;
@@ -184,6 +184,13 @@ public:
     return param_vec;
   }
 
+  std::string_view get_channel() const
+  {
+    if (source.find('.') != source.npos)
+      throw std::runtime_error("Called on server message");
+    return get_parameters()[0];
+  }
+
   //Friends/Misc
   friend std::ostream& operator<<(std::ostream& o, const IRCMessage& m)
   {
@@ -200,11 +207,11 @@ public:
 
 namespace message {
 
-inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask)
+inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::string_view channel)
 {
   // TODO: store admins to a persistent DB
   static uint64_t kkd_cap_mask = UINT64_MAX;
-  if (u.nickname == "kkd" && u.username == "memxor" && u.hostname == "unaffiliated/kartikeya") {
+  if (u.nickname == "kkd" && u.username == "~memxor" && u.hostname == "unaffiliated/kartikeya") {
     if ((kkd_cap_mask & cap_mask) != 0)
       return true;
   }
@@ -213,18 +220,20 @@ inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask)
 
 inline bool is_server_message(std::string_view source)
 {
-  if (source.find('.') != source.npos)
+  if (source.find('!') == source.npos)
     return false;
   return true;
 }
 
 inline bool is_message_quit(const IRCMessage& m)
 {
-  if (is_server_message(m.get_source()))
+  if (!is_server_message(m.get_source()))
     return false;
-  if (is_user_capable(m.get_user(), kQuit))
-    return true;
-  return false;
+  if (!is_user_capable(m.get_user(), kQuit, m.get_channel()))
+    return false;
+  if (!(m.get_parameters()[1] == ":,quit"))
+    return false;
+  return true;
 }
 
 } // namespace message

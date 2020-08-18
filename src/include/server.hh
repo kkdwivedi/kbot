@@ -14,6 +14,7 @@ namespace kbot {
 enum class ServerState {
   kDisconnected,
   kConnected,
+  kLoggedIn,
   kFailed,
   kMax,
 };
@@ -33,6 +34,7 @@ constexpr int ChannelStateMax = static_cast<int>(ChannelState::kMax);
 
 constexpr const char* const ServerStateStringTable[ServerStateMax] = {
   "Disconnected",
+  "Logged In"
   "Connected",
   "Failed",
 };

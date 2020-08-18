@@ -30,7 +30,6 @@ Server::Server(const int sockfd, const std::string addr, const uint16_t portnum,
   : IRC(sockfd), address(addr), port(portnum), nickname(nick)
 {
   std::clog << "Constructing Server: " << *this;
-  IRC::LOGIN(nickname);
 }
 
 Server::~Server()
