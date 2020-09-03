@@ -1,3 +1,4 @@
+#include <atomic>
 #include <iostream>
 #include <cassert>
 #include <cstdlib>
@@ -61,17 +62,16 @@ void Server::dump_info() const
   std::clog << "=== END OF DUMP ===\n";
 }
 
-enum ServerState Server::get_state() const
+ServerState Server::get_state() const
 {
-  return state;
+  return state.load(std::memory_order_relaxed);
 }
 
-void Server::set_state(const enum ServerState state) const
+void Server::set_state(const ServerState state_) const
 {
   std::clog << "State transition for Server: ";
-  std::lock_guard<std::mutex> lock(state_mtx);
-  std::clog << state_to_string(this->state) << " -> " << state_to_string(state);
-  this->state = state;
+  std::clog << state_to_string(state) << " -> " << state_to_string(state_);
+  state.store(state_, std::memory_order_relaxed);
   std::clog << "\n " << *this;
 }
 
@@ -91,16 +91,16 @@ const std::string& Server::get_nickname() const
   return nickname;
 }
 
-void Server::update_nickname(std::string_view nickname) const
+void Server::update_nickname(std::string_view nickname_) const
 {
   std::lock_guard<std::mutex> lock(nick_mtx);
-  this->nickname = nickname;
+  nickname = nickname_;
 }
 
-void Server::set_nickname(std::string_view nickname) const
+void Server::set_nickname(std::string_view nickname_) const
 {
   std::lock_guard<std::mutex> lock(nick_mtx);
-  auto r = IRC::NICK(nickname.data());
+  auto r = IRC::NICK(nickname_.data());
   if (r < 0) {
     std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
     return;

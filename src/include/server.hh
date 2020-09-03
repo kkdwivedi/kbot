@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -51,8 +52,7 @@ constexpr const char* const ChannelStateStringTable[ChannelStateMax] = {
 class Channel;
 
 class Server : public IRC {
-  mutable std::mutex state_mtx;
-  mutable enum ServerState state = ServerState::kDisconnected;
+  mutable std::atomic<ServerState> state = ServerState::kDisconnected;
   const std::string address;
   const uint16_t port;
   mutable std::mutex nick_mtx;
@@ -73,13 +73,13 @@ public:
   static constexpr const char* state_to_string(const enum ServerState state);
   // Basic API
   void dump_info() const;
-  enum ServerState get_state() const;
-  void set_state(const enum ServerState state) const;
+  ServerState get_state() const;
+  void set_state(const ServerState state_) const;
   const std::string& get_address() const;
   uint16_t get_port() const;
   const std::string& get_nickname() const;
-  void update_nickname(std::string_view nickname) const;
-  void set_nickname(std::string_view nickname) const;
+  void update_nickname(std::string_view nickname_) const;
+  void set_nickname(std::string_view nickname_) const;
   // Channel API
   ChannelID join_channel(const std::string& channel);
   bool send_channel(ChannelID id, std::string_view msg);
