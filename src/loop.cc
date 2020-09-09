@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
+#include <mutex>
 #include <string_view>
 #include <vector>
 #include <thread>
@@ -22,11 +23,18 @@ void cb_pong(const Server& s, const IRCMessage& m)
   s.send_msg("PONG: " + std::string(m.get_parameters()[0].substr(1, std::string::npos)));
 }
 
-void cb_privmsg(const Server& s, const IRCMessage& m)
+void cb_privmsg_hello(const Server& s, const IRCMessage& m)
 {
   if (m.get_parameters()[0] == "##kbot")
-    if (m.get_parameters()[1].substr(0, 4) == ":,hi")
-      s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
+    s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
+}
+
+void cb_privmsg(const Server& s, const IRCMessage& m)
+{
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
+  auto cb = get_privmsg_callback(m.get_parameters()[1]);
+  if (cb != nullptr)
+    cb(s, m);
 }
 
 void cb_nickname(const Server& s, const IRCMessage& m)
@@ -38,37 +46,64 @@ void cb_nickname(const Server& s, const IRCMessage& m)
   }
 }
 
-// Map of callbacks for each command
-std::unordered_map<std::string_view, callback_t> callback_map = {
-  { "PING", cb_pong },
-  { "PRIVMSG", cb_privmsg },
-  { "NICK", cb_nickname },
+// Map for bot commands
+std::unordered_map<std::string_view, callback_t> privmsg_callback_map = {
+  { ":,quit", nullptr },
+  { ":,hi", cb_privmsg_hello },
 };
 
 } // namespace
 
 // Mutex held during insertion/deletion
-std::recursive_mutex callback_map_mtx;
+std::recursive_mutex privmsg_callback_map_mtx;
 
-bool add_callback(std::string_view command, callback_t cb_ptr)
+bool add_privmsg_callback(std::string_view command, callback_t cb_ptr)
 {
   assert(cb_ptr != nullptr);
-  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
-  auto [_, b] = callback_map.insert({command, cb_ptr});
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
+  auto [_, b] = privmsg_callback_map.insert({command, cb_ptr});
   return b;
+}
+
+callback_t get_privmsg_callback(std::string_view command)
+{
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
+  auto it = privmsg_callback_map.find(command);
+  return it == privmsg_callback_map.end() ? nullptr : it->second;
+}
+
+static constexpr uint64_t get_lookup_mask(std::string_view command)
+{
+  const char *p = command.data();
+  uint64_t mask = 0;
+  if (command.size() <= 8) {
+    for (int i = 0; static_cast<size_t>(i) < command.size(); i++) {
+      mask |= static_cast<uint64_t>(static_cast<unsigned char>(*p++) & 0xff) << (i * 8);
+    }
+  }
+  return mask;
 }
 
 callback_t get_callback(std::string_view command)
 {
-  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
-  auto it = callback_map.find(command);
-  return it == callback_map.end() ? nullptr : it->second;
+  printf("Mask generated for %s -> %lx\n", std::string(command).data(), get_lookup_mask(command));
+  switch (get_lookup_mask(command)) {
+  case get_lookup_mask("PING"):
+    return cb_pong;
+  case get_lookup_mask("NICK"):
+    return cb_nickname;
+  case get_lookup_mask("PRIVMSG"):
+    return cb_privmsg;
+  case 0:
+  default:
+    return nullptr;
+  }
 }
 
-bool del_callback(std::string_view command)
+bool del_privmsg_callback(std::string_view command)
 {
-  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
-  return !!callback_map.erase(command);
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
+  return !!privmsg_callback_map.erase(command);
 }
 
 std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
@@ -85,7 +120,7 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 
 bool process_msg_line(Server *ptr, std::string_view line) try
 {
-  std::lock_guard<std::recursive_mutex> lock(callback_map_mtx);
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   const IRCMessage m(line);
   std::clog << " === " << m;
   // Handle termination as early as possible
