@@ -136,7 +136,7 @@ std::string IRC::recv_msg() const
   int tries = 5;
   do {
     buf.resize(r + 4096);
-    auto p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL|MSG_DONTWAIT);
+    ssize_t p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL|MSG_DONTWAIT);
     if (p <= 0) {
       if (errno != EAGAIN)
 	std::clog << "Failed to receive data: " << strerror(errno) << '\n';

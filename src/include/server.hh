@@ -63,23 +63,59 @@ class Server : public IRC {
   std::size_t chan_id = 0;
 public:
   using ChannelID = std::size_t;
-  explicit Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick);
+  explicit Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
+    : IRC(sockfd), address(addr), port(portnum), nickname(nick)
+  {
+    std::clog << "Constructing Server: " << *this;
+  }
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
   Server(Server&&) = delete;
   Server& operator=(Server&&) = delete;
-  ~Server();
+  ~Server()
+  {
+    std::clog << "Destructing Server: " << *this;
+    IRC::QUIT();
+  }
   // Static Methods
-  static constexpr const char* state_to_string(const enum ServerState state);
+  static constexpr const char* state_to_string(const enum ServerState state)
+  {
+    return ServerStateStringTable[static_cast<int>(state)];
+  }
   // Basic API
   void dump_info() const;
-  ServerState get_state() const;
+  ServerState get_state() const
+  {
+    return state.load(std::memory_order_relaxed);
+  }
   void set_state(const ServerState state_) const;
-  const std::string& get_address() const;
-  uint16_t get_port() const;
-  const std::string& get_nickname() const;
-  void update_nickname(std::string_view nickname_) const;
-  void set_nickname(std::string_view nickname_) const;
+  const std::string& get_address() const
+  {
+    return address;
+  }
+  uint16_t get_port() const
+  {
+    return port;
+  }
+  const std::string& get_nickname() const
+  {
+    std::lock_guard<std::mutex> lock(nick_mtx);
+    return nickname;
+  }
+  void update_nickname(std::string_view nickname_) const
+  {
+    std::lock_guard<std::mutex> lock(nick_mtx);
+    nickname = nickname_;
+  }
+  void set_nickname(std::string_view nickname_) const
+  {
+    std::lock_guard<std::mutex> lock(nick_mtx);
+    auto r = IRC::NICK(nickname_.data());
+    if (r < 0) {
+      std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
+      return;
+    }
+  }
   // Channel API
   ChannelID join_channel(const std::string& channel);
   bool send_channel(ChannelID id, std::string_view msg);
@@ -109,7 +145,10 @@ public:
   {
     return id;
   }
-  bool send_msg(std::string_view msg);
+  bool send_msg(std::string_view msg)
+  {
+    return !!sref.PRIVMSG(name, msg);
+  }
   std::string get_topic();
   bool set_topic(std::string_view topic);
 };

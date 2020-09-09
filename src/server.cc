@@ -18,31 +18,7 @@
 
 namespace kbot {
 
-// Channel
-
-bool Channel::send_msg(std::string_view msg)
-{
-  return !!sref.PRIVMSG(name, msg);
-}
-
 // Server
-
-Server::Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
-  : IRC(sockfd), address(addr), port(portnum), nickname(nick)
-{
-  std::clog << "Constructing Server: " << *this;
-}
-
-Server::~Server()
-{
-  std::clog << "Destructing Server: " << *this;
-  IRC::QUIT();
-}
-
-constexpr const char* Server::state_to_string(const enum ServerState state)
-{
-  return ServerStateStringTable[static_cast<int>(state)];
-}
 
 void Server::dump_info() const
 {
@@ -62,50 +38,12 @@ void Server::dump_info() const
   std::clog << "=== END OF DUMP ===\n";
 }
 
-ServerState Server::get_state() const
-{
-  return state.load(std::memory_order_relaxed);
-}
-
 void Server::set_state(const ServerState state_) const
 {
   std::clog << "State transition for Server: ";
   std::clog << state_to_string(state) << " -> " << state_to_string(state_);
   state.store(state_, std::memory_order_relaxed);
   std::clog << "\n " << *this;
-}
-
-const std::string& Server::get_address() const
-{
-  return address;
-}
-
-uint16_t Server::get_port() const
-{
-  return port;
-}
-
-const std::string& Server::get_nickname() const
-{
-  std::lock_guard<std::mutex> lock(nick_mtx);
-  return nickname;
-}
-
-void Server::update_nickname(std::string_view nickname_) const
-{
-  std::lock_guard<std::mutex> lock(nick_mtx);
-  nickname = nickname_;
-}
-
-void Server::set_nickname(std::string_view nickname_) const
-{
-  std::lock_guard<std::mutex> lock(nick_mtx);
-  auto r = IRC::NICK(nickname_.data());
-  if (r < 0) {
-    std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
-    return;
-  }
-  // The callback to update_nickname will reflect the change
 }
 
 // Channel API
