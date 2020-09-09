@@ -59,7 +59,6 @@ TEST(IRCMessage, UserRecord1)
   ASSERT_EQ(m2.get_user().nickname, "dan");
   ASSERT_EQ(m2.get_user().username, "");
   ASSERT_EQ(m2.get_user().hostname, "");
-  ASSERT_EQ(kbot::IRCMessage(":dan command param").get_user().username, m2.get_user().username);
   ASSERT_EQ(kbot::IRCMessage(":dan!~d@ command param").get_user().hostname, m2.get_user().hostname);
 }
 
