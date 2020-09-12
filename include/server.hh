@@ -8,7 +8,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "irc.hh"
+#include <irc.hh>
 
 namespace kbot {
 
@@ -35,7 +35,7 @@ constexpr int ChannelStateMax = static_cast<int>(ChannelState::kMax);
 
 constexpr const char* const ServerStateStringTable[ServerStateMax] = {
   "Disconnected",
-  "Logged In"
+  "Logged In",
   "Connected",
   "Failed",
 };
@@ -66,7 +66,6 @@ public:
   explicit Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
     : IRC(sockfd), address(addr), port(portnum), nickname(nick)
   {
-    std::clog << "Constructing Server: " << *this;
   }
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
@@ -74,7 +73,6 @@ public:
   Server& operator=(Server&&) = delete;
   ~Server()
   {
-    std::clog << "Destructing Server: " << *this;
     IRC::QUIT();
   }
   // Static Methods
@@ -122,8 +120,6 @@ public:
   bool set_topic(ChannelID id, std::string_view topic);
   std::string get_topic(ChannelID id);
   void part_channel(ChannelID id);
-  // Friends/Misc
-  friend std::ostream& operator<<(std::ostream& o, const Server& s);
 };
 
 class Channel {

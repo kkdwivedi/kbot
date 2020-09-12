@@ -30,6 +30,8 @@ inline constexpr const char* const IRCServiceStringTable[IRCServiceMax] = {
   "Atheme IRC Services",
 };
 
+// Low-level API to interact with the IRC server
+
 class IRC {
   const enum IRCService service_type = IRCService::kAtheme;
 public:
@@ -56,11 +58,15 @@ public:
   friend std::ostream& operator<<(std::ostream& o, const IRC& i);
 };
 
+// User record for IRC messages not from the server
+
 struct IRCUser {
   std::string_view nickname;
   std::string_view hostname;
   std::string_view username;
 };
+
+// Destructured raw IRC message
 
 class IRCMessage {
   std::string line;
@@ -186,7 +192,7 @@ public:
 
   std::string_view get_channel() const
   {
-    if (source.find('.') != source.npos)
+    if (source.find('!') == source.npos)
       throw std::runtime_error("Called on server message");
     return get_parameters()[0];
   }
@@ -203,11 +209,11 @@ public:
   }
 };
 
-// Predicates
+// Predicate functions
 
 namespace message {
 
-inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::string_view channel)
+inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::string_view)
 {
   // TODO: store admins to a persistent DB
   static uint64_t kkd_cap_mask = UINT64_MAX;
@@ -220,18 +226,18 @@ inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::stri
 
 inline bool is_server_message(std::string_view source)
 {
-  if (source.find('!') == source.npos)
+  if (source.find('!') != source.npos)
     return false;
   return true;
 }
 
-inline bool is_message_quit(const IRCMessage& m)
+inline bool is_quit_message(const IRCMessage& m)
 {
-  if (!is_server_message(m.get_source()))
+  if (is_server_message(m.get_source()))
+    return false;
+  if (m.get_parameters().size() > 1 && !(m.get_parameters()[1] == ":,quit"))
     return false;
   if (!is_user_capable(m.get_user(), kQuit, m.get_channel()))
-    return false;
-  if (!(m.get_parameters()[1] == ":,quit"))
     return false;
   return true;
 }

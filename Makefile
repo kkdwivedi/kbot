@@ -1,8 +1,8 @@
 CXX = clang++ -std=c++20 -D_GNU_SOURCE -O3
 
-INCLUDE_ALL = -Isrc/include
+INCLUDE_ALL = -Iinclude
 CFLAGS = -Wall -Wextra -fstrict-aliasing -Wstrict-aliasing=2 $(INCLUDE_ALL) \
-	 -Wconversion -Wsign-conversion -Wpedantic
+	 -Wconversion -Wsign-conversion -Wpedantic -Wno-gnu-zero-variadic-macro-arguments
 CFLAGS_DEBUG = -ggdb -fsanitize=address,undefined
 TEST_LIB = -lgtest
 

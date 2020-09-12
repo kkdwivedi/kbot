@@ -6,6 +6,7 @@
 
 #include <unistd.h>
 
+#include <log.hh>
 #include <loop.hh>
 #include <server.hh>
 
@@ -90,7 +91,7 @@ int main(int argc, char *argv[])
   ptr->send_channel(id, "Hello World!");
   ptr->dump_info();
   kbot::supervisor_run();
-  std::clog << "Shutting down...\n";
+  log_debug("Shutting down...");
 
   return 0;
 }

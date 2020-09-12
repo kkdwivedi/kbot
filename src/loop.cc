@@ -77,7 +77,7 @@ static constexpr uint64_t get_lookup_mask(std::string_view command)
   const char *p = command.data();
   uint64_t mask = 0;
   if (command.size() <= 8) {
-    for (int i = 0; static_cast<size_t>(i) < command.size(); i++) {
+    for (size_t i = 0; i < command.size(); i++) {
       mask |= static_cast<uint64_t>(static_cast<unsigned char>(*p++) & 0xff) << (i * 8);
     }
   }
@@ -120,20 +120,20 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 
 bool process_msg_line(Server *ptr, std::string_view line) try
 {
-  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   const IRCMessage m(line);
   std::clog << " === " << m;
   // Handle termination as early as possible
-  if (message::is_message_quit(m))
+  if (message::is_quit_message(m))
     return false;
+  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   auto cb = get_callback(m.get_command());
   if (cb != nullptr) {
     std::clog << "Command found ... Dispatching callback.\n";
     cb(*ptr, m);
   }
   return true;
-} catch (std::runtime_error&) {
-  std::clog << "Caught IRCMessage exception\n";
+} catch (std::runtime_error& e) {
+  std::clog << "Caught IRCMessage exception: (" << e.what() << ")\n";
   return false;
 }
 
