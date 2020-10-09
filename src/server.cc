@@ -12,8 +12,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <glog/logging.h>
 
-#include <log.hh>
 #include <irc.hh>
 #include <server.hh>
 
@@ -23,25 +23,20 @@ namespace kbot {
 
 void Server::dump_info() const
 {
-  log_warn("=== DUMP FOR SERVER ===");
-  log_warn("Address: %s/%d\n ---", address.c_str(), port);
+  DLOG(INFO) << "Dump for Server: " << address << '/' << port;
   {
     std::lock_guard<std::mutex> lock(nick_mtx);
-    log_warn(" Nickname: %s", nickname.c_str());
+    DLOG(INFO) << "Nickname: " << nickname;
   }
   std::lock_guard<std::mutex> lock(chan_mtx);
-  log_debug(" Channels : %zu\n ---\n", chan_id_map.size());
   for (auto& p : chan_id_map) {
-    log_warn("  Name  : %s", p.second->get_name().c_str());
-    // std::clog << "  Topic : " << p.second->get_topic() << '\n';
-    log_warn(" ---");
+    DLOG(INFO) << " Channel: " << p.second->get_name();
   }
-  log_warn("=== END OF DUMP ===");
 }
 
 void Server::set_state(const ServerState state_) const
 {
-  log_debug("State transition for Server: %s -> %s", state_to_string(state), state_to_string(state_));
+  LOG(INFO) << "State transition for server: " << state_to_string(state) << " -> " << state_to_string(state_);
   state.store(state_, std::memory_order_relaxed);
 }
 
@@ -53,7 +48,7 @@ Server::ChannelID Server::join_channel(const std::string& channel) {
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
     auto r = IRC::JOIN(channel);
     if (r < 0) {
-      log_error("Failed to JOIN channel: %s", channel.c_str());
+      LOG(ERROR) << "Failed to join channel: " << channel;
       return id;
     }
     id = ++chan_id;
@@ -82,7 +77,7 @@ void Server::part_channel(Server::ChannelID id)
   auto& chan_str = it->second->get_name();
   auto r = IRC::PART(chan_str);
   if (r < 0) {
-    log_error("Failed to PART channel: %s", chan_str.c_str());
+    LOG(ERROR) << "Failed to part channel: " << chan_str;
     return;
   }
   chan_string_map.erase(chan_str);
@@ -112,7 +107,7 @@ int connection_fd(const char *addr, const uint16_t port)
   int r = getaddrinfo(addr, std::to_string(port).c_str(), &hints, &result);
   conn_mtx.lock();
   if (r != 0) {
-    log_error("Failed to resolve name: %s", gai_strerror(errno));
+    LOG(ERROR) << "Failed to resolve name: " << gai_strerror(errno);
     return fd;
   }
 
@@ -136,51 +131,48 @@ int connection_fd(const char *addr, const uint16_t port)
 // Get a shared_ptr to a new or preexisting Server
 std::shared_ptr<Server> connection_new(std::string address, const uint16_t port, const char *nickname)
 {
-  static size_t _id;
   std::string key(address);
   std::lock_guard<std::mutex> lock(conn_mtx);
-
-  ++_id;
-  log_debug_id(_id, "Initiating cache lookup for %s/%d (%s)", address.c_str(), port, nickname);
+  DLOG(INFO) << "Initiating cache lookup for " << address.c_str() << '/' << port << '(' << nickname << ')';
   if (auto it = conn_cache.find(key); it != conn_cache.end()) {
     auto& wptr = it->second;
     if (wptr.expired()) {
-      log_debug_id(_id, "Server was erased, recreating...");
+      DLOG(INFO) << "Entry expired, recreating";
       auto fd = connection_fd(key.c_str(), port);
       // Due to releasing lock during the address resolution, possibly another thread succeeded in
       // creating the entry, in that case we return it, otherwise we know we failed.
       auto sptr = wptr.lock();
       if (fd < 0) {
 	if (sptr != nullptr) {
-	  log_debug_id(_id, "Failed resolution but entry was created, returning");
+	  DLOG(INFO) << "Resolution failed but entry was created";
 	  return sptr;
 	}
-	log_debug_id(_id, "Failed to create socket fd");
+	DLOG(ERROR) << "Failed to create socket fd";
 	return sptr;
       }
       sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
-      log_debug_id(_id, "Successfully created Server");
+      DLOG(INFO) << "Successfully created server";
       sptr->set_state(ServerState::kConnected);
       return sptr;
     } else {
-      log_debug_id(_id, "Found existing Server in cache, returning");
+      DLOG(INFO) << "Found existing connection";
       return it->second.lock();
     }
   } else {
-    log_debug_id(_id, "Server absent, creating a new Server...");
+    DLOG(INFO) << "Creating new server";
     auto fd = connection_fd(key.c_str(), port);
     if (fd < 0) {
       if (auto it = conn_cache.find(key); it != conn_cache.end()) {
-	log_debug_id(_id, "Failed resolution but entry was created, returning");
+	DLOG(INFO) << "Resolution failed but entry was created";
 	return it->second.lock();
       }
-      log_debug_id(_id, "Failed to create socket fd");
+      DLOG(INFO) << "Failed to create socket fd";
       return nullptr;
     }
     auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
     conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
-    log_debug_id(_id, "Successfully created Server\n");
+    DLOG(INFO) << "Successfully created server";
     sptr->set_state(ServerState::kConnected);
     return sptr;
   }
@@ -191,7 +183,7 @@ void connection_delete(const Server *s)
   assert(s);
   std::lock_guard<std::mutex> lock(conn_mtx);
   conn_cache.erase(s->get_address());
-  log_debug("Erasing Server from connection cache: ");
+  DLOG(INFO) << "Erasing server from cache: ";
   s->dump_info();
   delete s;
 }

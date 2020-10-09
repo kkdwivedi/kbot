@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include <poll.h>
+#include <glog/logging.h>
 
 #include <irc.hh>
 #include <loop.hh>
@@ -19,8 +20,18 @@ namespace {
 
 void cb_pong(const Server& s, const IRCMessage& m)
 {
-  std::clog << "Received PING, replying with PONG to " << m.get_parameters()[0] << '\n';
+  LOG(INFO) << "Received PING, replying with PONG to" << m.get_parameters()[0];
   s.send_msg("PONG: " + std::string(m.get_parameters()[0].substr(1, std::string::npos)));
+}
+
+void cb_nickname(const Server& s, const IRCMessage& m)
+{
+  std::string_view new_nick = m.get_parameters()[0].substr(1);
+  auto u = m.get_user();
+  LOG(INFO) << "Nickname change received: " << u.nickname << " -> " << new_nick;
+  if (std::lock_guard<std::mutex> lock(s.nick_mtx); u.nickname == s.nickname) {
+    s.nickname = new_nick;
+  }
 }
 
 void cb_privmsg_hello(const Server& s, const IRCMessage& m)
@@ -37,33 +48,16 @@ void cb_privmsg(const Server& s, const IRCMessage& m)
     cb(s, m);
 }
 
-void cb_nickname(const Server& s, const IRCMessage& m)
-{
-  auto u = m.get_user();
-  std::clog << "Noticed nickname change\n";
-  if (u.nickname == s.get_nickname()) {
-    s.update_nickname(m.get_parameters()[0].substr(1));
-  }
-}
-
 // Map for bot commands
 std::unordered_map<std::string_view, callback_t> privmsg_callback_map = {
   { ":,quit", nullptr },
-  { ":,hi", cb_privmsg_hello },
+  { ":,hi", &cb_privmsg_hello },
 };
 
 } // namespace
 
 // Mutex held during insertion/deletion
 std::recursive_mutex privmsg_callback_map_mtx;
-
-bool add_privmsg_callback(std::string_view command, callback_t cb_ptr)
-{
-  assert(cb_ptr != nullptr);
-  std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
-  auto [_, b] = privmsg_callback_map.insert({command, cb_ptr});
-  return b;
-}
 
 callback_t get_privmsg_callback(std::string_view command)
 {
@@ -86,14 +80,13 @@ static constexpr uint64_t get_lookup_mask(std::string_view command)
 
 callback_t get_callback(std::string_view command)
 {
-  printf("Mask generated for %s -> %lx\n", std::string(command).data(), get_lookup_mask(command));
   switch (get_lookup_mask(command)) {
   case get_lookup_mask("PING"):
-    return cb_pong;
+    return &cb_pong;
   case get_lookup_mask("NICK"):
-    return cb_nickname;
+    return &cb_nickname;
   case get_lookup_mask("PRIVMSG"):
-    return cb_privmsg;
+    return &cb_privmsg;
   case 0:
   default:
     return nullptr;
@@ -121,25 +114,26 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 bool process_msg_line(Server *ptr, std::string_view line) try
 {
   const IRCMessage m(line);
-  std::clog << " === " << m;
+  LOG(INFO) << " === " << m;
   // Handle termination as early as possible
   if (message::is_quit_message(m))
     return false;
   std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   auto cb = get_callback(m.get_command());
   if (cb != nullptr) {
-    std::clog << "Command found ... Dispatching callback.\n";
+    LOG(INFO) << "Command found ... Dispatching callback.";
     cb(*ptr, m);
   }
   return true;
 } catch (std::runtime_error& e) {
-  std::clog << "Caught IRCMessage exception: (" << e.what() << ")\n";
+  LOG(INFO) << "Caught IRCMessage exception: (" << e.what() << ")";
   return false;
 }
 
 void worker_run(std::shared_ptr<Server> ptr)
 {
-  std::clog << "Main loop for Server: " << *ptr;
+  LOG(INFO) << "Main loop for Server: ";
+  ptr->dump_info();
   struct pollfd pfd = { .fd = ptr->fd, .events = POLLIN };
   for (bool r = true; r;) {
     poll(&pfd, 1, -1);
@@ -160,7 +154,7 @@ void supervisor_run()
     sem_wait(&tr.req_sem);
     auto sptr = tr.pop_front();
     if (sptr == nullptr) {
-      std::clog << "Received notification to quit\n";
+      DLOG(INFO) << "Received notification to quit";
       break;
     }
     jthr_vec.emplace_back(worker_run, sptr);

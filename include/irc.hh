@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include <sys/types.h>
+#include <glog/logging.h>
 
 namespace kbot {
 
@@ -64,6 +65,7 @@ struct IRCUser {
   std::string_view nickname;
   std::string_view hostname;
   std::string_view username;
+  std::string_view channel;
 };
 
 // Destructured raw IRC message
@@ -130,7 +132,7 @@ public:
     param_vec.shrink_to_fit();
     tag_kv.shrink_to_fit();
   } catch (const char *e) {
-    std::clog << "Failure: " << e << " (" << l << ')' << '\n';
+    DLOG(ERROR) << "Failure: " << e << " (" << l << ')';
     throw std::runtime_error("IRCMessage parsing error");
   }
 
@@ -160,6 +162,7 @@ public:
       next = src_size;
       assert(cur <= next);
       u.hostname = std::string_view(&source[cur], &source[next]);
+      u.channel = std::string_view(param_vec.at(0));
       return u;
     }
     throw std::runtime_error("Source is not a user");
@@ -194,7 +197,7 @@ public:
   {
     if (source.find('!') == source.npos)
       throw std::runtime_error("Called on server message");
-    return get_parameters()[0];
+    return param_vec.at(0);
   }
 
   //Friends/Misc
@@ -213,7 +216,7 @@ public:
 
 namespace message {
 
-inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::string_view)
+inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask)
 {
   // TODO: store admins to a persistent DB
   static uint64_t kkd_cap_mask = UINT64_MAX;
@@ -224,20 +227,35 @@ inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask, std::stri
   return false;
 }
 
-inline bool is_server_message(std::string_view source)
+inline bool is_user_message(std::string_view source)
 {
-  if (source.find('!') != source.npos)
+  if (source.find('!') == source.npos)
     return false;
   return true;
+}
+
+inline bool is_server_message(std::string_view source)
+{
+  return !is_user_message(std::move(source));
 }
 
 inline bool is_quit_message(const IRCMessage& m)
 {
   if (is_server_message(m.get_source()))
     return false;
-  if (m.get_parameters().size() > 1 && !(m.get_parameters()[1] == ":,quit"))
+  auto& params = m.get_parameters();
+  if (params.size() > 1 && !(params.at(1) == ":,quit"))
     return false;
-  if (!is_user_capable(m.get_user(), kQuit, m.get_channel()))
+  if (!is_user_capable(m.get_user(), kQuit))
+    return false;
+  return true;
+}
+
+inline bool is_privmsg_message(const IRCMessage& m)
+{
+  if (is_server_message(m.get_source()))
+    return false;
+  if (m.get_command() != "PRIVMSG")
     return false;
   return true;
 }

@@ -8,6 +8,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <glog/logging.h>
+
 #include <irc.hh>
 
 namespace kbot {
@@ -55,13 +57,14 @@ class Server : public IRC {
   mutable std::atomic<ServerState> state = ServerState::kDisconnected;
   const std::string address;
   const uint16_t port;
-  mutable std::mutex nick_mtx;
-  mutable std::string nickname;
   mutable std::mutex chan_mtx;
   std::unordered_map<std::size_t, std::unique_ptr<Channel>> chan_id_map;
   std::unordered_map<std::string, std::size_t> chan_string_map;
   std::size_t chan_id = 0;
 public:
+  mutable std::mutex nick_mtx;
+  mutable std::string nickname;
+
   using ChannelID = std::size_t;
   explicit Server(const int sockfd, const std::string addr, const uint16_t portnum, const char *nick)
     : IRC(sockfd), address(addr), port(portnum), nickname(nick)
@@ -110,7 +113,7 @@ public:
     std::lock_guard<std::mutex> lock(nick_mtx);
     auto r = IRC::NICK(nickname_.data());
     if (r < 0) {
-      std::clog << "Failed to send NICK command for nickname: " << nickname << '\n';
+      LOG(ERROR) << "Failed to send NICK command for nickname: " << nickname;
       return;
     }
   }

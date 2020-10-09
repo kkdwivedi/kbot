@@ -51,7 +51,7 @@ inline ThreadRequest tr;
 void worker_run(std::shared_ptr<Server> ptr);
 void supervisor_run();
 
-using callback_t = void(*)(const Server& s, const IRCMessage& m);
+using callback_t = void (*)(const Server& s, const IRCMessage& m);
 
 extern std::recursive_mutex privmsg_callback_map_mtx;
 

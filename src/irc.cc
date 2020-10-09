@@ -11,17 +11,18 @@
 #include <unistd.h>
 
 #include <irc.hh>
+#include <glog/logging.h>
 
 namespace kbot {
 
 IRC::IRC(const int sockfd) : fd(sockfd)
 {
-  std::clog << "Constructing IRC Backend: " << *this;
+  DLOG(INFO) << "Constructing IRC Backend: " << *this;
 }
 
 IRC::~IRC()
 {
-  std::clog << "Destructing IRC Backend: " << *this;
+  DLOG(INFO) << "Destructing IRC Backend: " << *this;
   close(fd);
 }
 
@@ -41,18 +42,18 @@ ssize_t IRC::LOGIN(std::string_view nickname, std::string_view password) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0) {
-    std::clog << "Failed to send USER LOGIN message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send USER LOGIN message: " << strerror(errno);
     fail = r;
   }
   r = NICK(nickname);
   if (r < 0) {
-    std::clog << "Failed to send NICK LOGIN message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send NICK LOGIN message: " << strerror(errno);
     fail = r;
   }
   if (password != "") {
     r = PRIVMSG("NickServ", std::string("identify ") += password);
     if (r < 0)
-      std::clog << "Failed to send IDENTIFY LOGIN message: " << strerror(errno) << '\n';
+      LOG(ERROR) << "Failed to send IDENTIFY LOGIN message: " << strerror(errno);
     fail = r;
   }
   return fail;
@@ -66,7 +67,7 @@ ssize_t IRC::NICK(std::string_view nickname) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0)
-    std::clog << "Failed to send NICK message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send NICK message: " << strerror(errno);
   return r;
 }
 
@@ -78,7 +79,7 @@ ssize_t IRC::JOIN(std::string_view channel) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0)
-    std::clog << "Failed to send JOIN message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send JOIN message: " << strerror(errno);
   return r;
 }
 
@@ -90,7 +91,7 @@ ssize_t IRC::PART(std::string_view channel) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0)
-    std::clog << "Failed to send PART message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send PART message: " << strerror(errno);
   return r;
 }
 
@@ -104,7 +105,7 @@ ssize_t IRC::PRIVMSG(std::string_view recipient, std::string_view msg) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0)
-    std::clog << "Failed to send PRIVMSG message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send PRIVMSG message: " << strerror(errno);
   return r;
 }
 
@@ -116,7 +117,7 @@ ssize_t IRC::QUIT(std::string_view msg) const
   buf += "\r\n";
   auto r = send_msg(buf);
   if (r < 0)
-    std::clog << "Failed to send QUIT message: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send QUIT message: " << strerror(errno);
   return r;
 }
 
@@ -124,7 +125,7 @@ ssize_t IRC::send_msg(std::string_view msg) const
 {
   auto r = send(fd, msg.data(), msg.size(), MSG_NOSIGNAL);
   if (r < 0) {
-    std::clog << "Failed to send data: " << strerror(errno) << '\n';
+    LOG(ERROR) << "Failed to send data: " << strerror(errno);
   }
   return r;
 }
@@ -139,7 +140,7 @@ std::string IRC::recv_msg() const
     ssize_t p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL|MSG_DONTWAIT);
     if (p <= 0) {
       if (errno != EAGAIN)
-	std::clog << "Failed to receive data: " << strerror(errno) << '\n';
+	LOG(ERROR) << "Failed to receive data: " << strerror(errno);
       if (r) break;
       else return "";
     }
@@ -155,7 +156,7 @@ std::string IRC::recv_msg() const
 
 std::ostream& operator<<(std::ostream& o, const IRC& i)
 {
-  return o << "Service: " << i.state_to_string(i.service_type) << " (SSL: " << "false" << ")\n";
+  return o << "Service: " << i.state_to_string(i.service_type) << " (SSL: " << "false" << ")";
 }
 
 } // namespace kbot
