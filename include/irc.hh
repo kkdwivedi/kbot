@@ -70,7 +70,17 @@ struct IRCUser {
 
 // Destructured raw IRC message
 
+enum class IRCMessageType : uint8_t {
+    _DEFAULT,
+    LOGIN,
+    NICK,
+    JOIN,
+    PART,
+    PRIVMSG,
+};
+
 class IRCMessage {
+protected:
   std::string line;
   std::string_view tags;
   std::vector<std::pair<std::string_view, std::string_view>> tag_kv;
@@ -79,7 +89,9 @@ class IRCMessage {
   std::vector<std::string_view> param_vec;
 
 public:
-  explicit IRCMessage(std::string_view l) try : line(l)
+  IRCMessageType message_type = IRCMessageType::_DEFAULT;
+
+  explicit IRCMessage(std::string_view l, IRCMessageType t = IRCMessageType::_DEFAULT) try : line(l), message_type(t)
   {
     size_t i = 0, prev = 0;
     if (line[i] == '@') {
@@ -110,6 +122,9 @@ public:
       }
       source = std::string_view(&line[prev], &line[i++]);
     }
+    if (source != "" && source.find('!') == source.npos && message_type == IRCMessageType::PRIVMSG) {
+      throw std::runtime_error("Bad source: Server message");
+    }
     if (line[i] != '\0') {
       prev = i;
       i = line.find(' ', prev);
@@ -138,35 +153,19 @@ public:
 
   IRCMessage(const IRCMessage&) = delete;
   IRCMessage& operator=(IRCMessage&) = delete;
-  IRCMessage(IRCMessage&&) = delete;
-  IRCMessage& operator=(IRCMessage&&) = delete;
-  ~IRCMessage() = default;
-
-  // Query API
-  IRCUser get_user() const
+  IRCMessage(IRCMessage&& m)
   {
-    if (source.find('!') != source.npos) {
-      IRCUser u = {};
-      size_t src_size = source.size();
-      size_t cur = 0;
-      size_t next = std::min(source.find('!', cur), src_size);
-      assert(cur <= next);
-      u.nickname = std::string_view(&source[cur], &source[next]);
-      if (next == src_size) return u;
-      cur = next + 1;
-      next = std::min(source.find('@', next), src_size);
-      assert(cur <= next);
-      u.username = std::string_view(&source[cur], &source[next]);
-      if (next == src_size) return u;
-      cur = next + 1;
-      next = src_size;
-      assert(cur <= next);
-      u.hostname = std::string_view(&source[cur], &source[next]);
-      u.channel = std::string_view(param_vec.at(0));
-      return u;
-    }
-    throw std::runtime_error("Source is not a user");
+    message_type = m.message_type;
+    m.message_type = IRCMessageType::_DEFAULT;
+    line = std::move(m.line);
+    tags = std::move(m.tags);
+    tag_kv = std::move(m.tag_kv);
+    source = std::move(m.source);
+    command = std::move(m.command);
+    param_vec = std::move(m.param_vec);
   }
+  IRCMessage& operator=(IRCMessage&&) = delete;
+  virtual ~IRCMessage() = default;
 
   std::string_view get_tags() const
   {
@@ -193,13 +192,6 @@ public:
     return param_vec;
   }
 
-  std::string_view get_channel() const
-  {
-    if (source.find('!') == source.npos)
-      throw std::runtime_error("Called on server message");
-    return param_vec.at(0);
-  }
-
   //Friends/Misc
   friend std::ostream& operator<<(std::ostream& o, const IRCMessage& m)
   {
@@ -209,6 +201,39 @@ public:
     for (auto& sv : m.param_vec)
       o << sv << ' ';
     return o << '\n';
+  }
+};
+
+// Message Types
+
+class IRCMessagePrivmsg : public IRCMessage {
+public:
+  IRCMessagePrivmsg(std::string_view l) : IRCMessage(std::move(l), IRCMessageType::PRIVMSG) {}
+  IRCMessagePrivmsg(IRCMessage&& m) : IRCMessage(std::move(m)) {}
+  IRCUser get_user() const
+  {
+    IRCUser u = {};
+    size_t src_size = source.size();
+    size_t cur = 0;
+    size_t next = std::min(source.find('!', cur), src_size);
+    assert(cur <= next);
+    u.nickname = std::string_view(&source[cur], &source[next]);
+    if (next == src_size) return u;
+    cur = next + 1;
+    next = std::min(source.find('@', next), src_size);
+    assert(cur <= next);
+    u.username = std::string_view(&source[cur], &source[next]);
+    if (next == src_size) return u;
+    cur = next + 1;
+    next = src_size;
+    assert(cur <= next);
+    u.hostname = std::string_view(&source[cur], &source[next]);
+    u.channel = std::string_view(param_vec.at(0));
+    return u;
+  }
+  std::string_view get_channel() const
+  {
+    return param_vec.at(0);
   }
 };
 
@@ -246,7 +271,9 @@ inline bool is_quit_message(const IRCMessage& m)
   auto& params = m.get_parameters();
   if (params.size() > 1 && !(params.at(1) == ":,quit"))
     return false;
-  if (!is_user_capable(m.get_user(), kQuit))
+  if (m.message_type != IRCMessageType::PRIVMSG)
+    return false;
+  if (!is_user_capable(static_cast<const IRCMessagePrivmsg&>(m).get_user(), kQuit))
     return false;
   return true;
 }

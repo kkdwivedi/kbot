@@ -27,14 +27,14 @@ void cb_pong(const Server& s, const IRCMessage& m)
 void cb_nickname(const Server& s, const IRCMessage& m)
 {
   std::string_view new_nick = m.get_parameters()[0].substr(1);
-  auto u = m.get_user();
+  auto u = static_cast<const IRCMessagePrivmsg&>(m).get_user();
   LOG(INFO) << "Nickname change received: " << u.nickname << " -> " << new_nick;
   if (std::lock_guard<std::mutex> lock(s.nick_mtx); u.nickname == s.nickname) {
     s.nickname = new_nick;
   }
 }
 
-void cb_privmsg_hello(const Server& s, const IRCMessage& m)
+void cb_privmsg_hello(const Server& s, const IRCMessagePrivmsg& m)
 {
   if (m.get_parameters()[0] == "##kbot")
     s.PRIVMSG("##kbot", std::string(m.get_user().nickname) += ": Hey buddy!");
@@ -45,11 +45,11 @@ void cb_privmsg(const Server& s, const IRCMessage& m)
   std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   auto cb = get_privmsg_callback(m.get_parameters()[1]);
   if (cb != nullptr)
-    cb(s, m);
+    cb(s, static_cast<const IRCMessagePrivmsg&>(m));
 }
 
 // Map for bot commands
-std::unordered_map<std::string_view, callback_t> privmsg_callback_map = {
+std::unordered_map<std::string_view, void(*)(const Server&, const IRCMessagePrivmsg&)> privmsg_callback_map = {
   { ":,quit", nullptr },
   { ":,hi", &cb_privmsg_hello },
 };
@@ -59,7 +59,7 @@ std::unordered_map<std::string_view, callback_t> privmsg_callback_map = {
 // Mutex held during insertion/deletion
 std::recursive_mutex privmsg_callback_map_mtx;
 
-callback_t get_privmsg_callback(std::string_view command)
+auto get_privmsg_callback(std::string_view command) -> void(*)(const Server&, const IRCMessagePrivmsg&)
 {
   std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   auto it = privmsg_callback_map.find(command);
@@ -113,16 +113,20 @@ std::vector<std::string_view> tokenize_msg_multi(std::string& msg)
 
 bool process_msg_line(Server *ptr, std::string_view line) try
 {
-  const IRCMessage m(line);
-  LOG(INFO) << " === " << m;
+  auto m = std::make_unique<IRCMessage>(line);
+  if (message::is_privmsg_message(*m)) {
+    m->message_type = IRCMessageType::PRIVMSG;
+    m = std::make_unique<IRCMessagePrivmsg>(std::move(*m));
+  }
+  LOG(INFO) << ">>> " << *m;
   // Handle termination as early as possible
-  if (message::is_quit_message(m))
+  if (message::is_quit_message(*m))
     return false;
   std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
-  auto cb = get_callback(m.get_command());
+  auto cb = get_callback(m->get_command());
   if (cb != nullptr) {
     LOG(INFO) << "Command found ... Dispatching callback.";
-    cb(*ptr, m);
+    cb(*ptr, *m);
   }
   return true;
 } catch (std::runtime_error& e) {

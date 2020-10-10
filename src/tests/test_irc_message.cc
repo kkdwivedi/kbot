@@ -45,21 +45,21 @@ TEST(IRCMessage, BadMessage1)
 
 TEST(IRCMessage, UserRecord1)
 {
-  const kbot::IRCMessage m(":dan!~d@localhost/foo command param");
+  const kbot::IRCMessagePrivmsg m(":dan!~d@localhost/foo command param");
   auto u = m.get_user();
   ASSERT_EQ(u.nickname, "dan");
   ASSERT_EQ(u.username, "~d");
   ASSERT_EQ(u.hostname, "localhost/foo");
-  ASSERT_THROW(kbot::IRCMessage(":source. command param").get_user(), std::runtime_error);
-  const kbot::IRCMessage m1(":dan!~d command param");
+  ASSERT_THROW(kbot::IRCMessagePrivmsg(":source. command param").get_user(), std::runtime_error);
+  const kbot::IRCMessagePrivmsg m1(":dan!~d command param");
   ASSERT_EQ(m1.get_user().nickname, "dan");
   ASSERT_EQ(m1.get_user().username, "~d");
   ASSERT_EQ(m1.get_user().hostname, "");
-  const kbot::IRCMessage m2(":dan! command param");
+  const kbot::IRCMessagePrivmsg m2(":dan! command param");
   ASSERT_EQ(m2.get_user().nickname, "dan");
   ASSERT_EQ(m2.get_user().username, "");
   ASSERT_EQ(m2.get_user().hostname, "");
-  ASSERT_EQ(kbot::IRCMessage(":dan!~d@ command param").get_user().hostname, m2.get_user().hostname);
+  ASSERT_EQ(kbot::IRCMessagePrivmsg(":dan!~d@ command param").get_user().hostname, m2.get_user().hostname);
 }
 
 int main()

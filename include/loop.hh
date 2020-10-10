@@ -56,7 +56,7 @@ using callback_t = void (*)(const Server& s, const IRCMessage& m);
 extern std::recursive_mutex privmsg_callback_map_mtx;
 
 bool add_privmsg_callback(std::string_view command, callback_t cb_ptr);
-callback_t get_privmsg_callback(std::string_view command);
+auto get_privmsg_callback(std::string_view command) -> void(*)(const Server&, const IRCMessagePrivmsg&);
 callback_t get_callback(std::string_view command);
 bool del_privmsg_callback(std::string_view command);
 
