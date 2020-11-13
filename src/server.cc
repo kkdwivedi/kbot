@@ -1,49 +1,48 @@
-#include <atomic>
-#include <iostream>
-#include <cassert>
-#include <cstdlib>
-#include <cstring>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
-
 #include <arpa/inet.h>
+#include <glog/logging.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <glog/logging.h>
 
+#include <atomic>
+#include <cassert>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <irc.hh>
+#include <memory>
+#include <mutex>
 #include <server.hh>
+#include <shared_mutex>
+#include <unordered_map>
 
 namespace kbot {
 
 // Server
 
-void Server::dump_info() const
-{
+void Server::dump_info() const {
   DLOG(INFO) << "Dump for Server: " << address << '/' << port;
   {
-    std::lock_guard<std::mutex> lock(nick_mtx);
+    std::unique_lock lock(nick_mtx);
     DLOG(INFO) << "Nickname: " << nickname;
   }
-  std::lock_guard<std::mutex> lock(chan_mtx);
+  std::shared_lock read_lock(chan_mtx);
   for (auto& p : chan_id_map) {
     DLOG(INFO) << " Channel: " << p.second->get_name();
   }
 }
 
-void Server::set_state(const ServerState state_) const
-{
-  LOG(INFO) << "State transition for server: " << state_to_string(state) << " -> " << state_to_string(state_);
+void Server::set_state(const ServerState state_) const {
+  LOG(INFO) << "State transition for server: " << state_to_string(state)
+            << " -> " << state_to_string(state_);
   state.store(state_, std::memory_order_relaxed);
 }
 
 // Channel API
 
 Server::ChannelID Server::join_channel(const std::string& channel) {
-  std::lock_guard<std::mutex> lock(chan_mtx);
+  std::unique_lock lock(chan_mtx);
   ChannelID id = SIZE_MAX;
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
     auto r = IRC::JOIN(channel);
@@ -61,17 +60,15 @@ Server::ChannelID Server::join_channel(const std::string& channel) {
   return id;
 }
 
-bool Server::send_channel(ChannelID id, const std::string_view msg)
-{
-  std::lock_guard<std::mutex> lock(chan_mtx);
+bool Server::send_channel(ChannelID id, const std::string_view msg) {
+  std::unique_lock lock(chan_mtx);
   auto it = chan_id_map.find(id);
   assert(it != chan_id_map.end());
   return it->second->send_msg(msg);
 }
 
-void Server::part_channel(Server::ChannelID id)
-{
-  std::lock_guard<std::mutex> lock(chan_mtx);
+void Server::part_channel(Server::ChannelID id) {
+  std::unique_lock lock(chan_mtx);
   auto it = chan_id_map.find(id);
   assert(it != chan_id_map.end());
   auto& chan_str = it->second->get_name();
@@ -92,8 +89,7 @@ std::mutex conn_mtx;
 std::unordered_map<std::string, std::weak_ptr<Server>> conn_cache;
 
 // Caller must hold the conn_mtx lock
-int connection_fd(const char *addr, const uint16_t port)
-{
+int connection_fd(const char* addr, const uint16_t port) {
   int fd = -1;
 
   struct addrinfo hints, *result;
@@ -111,46 +107,48 @@ int connection_fd(const char *addr, const uint16_t port)
     return fd;
   }
 
-  struct addrinfo *i = result;
+  struct addrinfo* i = result;
   for (; i != nullptr; i = i->ai_next) {
-    fd = socket(i->ai_family, i->ai_socktype|SOCK_CLOEXEC, i->ai_protocol);
-    if (fd < 0)
-      break;
-    if (connect(fd, i->ai_addr, i->ai_addrlen) == 0)
-      break;
+    fd = socket(i->ai_family, i->ai_socktype | SOCK_CLOEXEC, i->ai_protocol);
+    if (fd < 0) break;
+    if (connect(fd, i->ai_addr, i->ai_addrlen) == 0) break;
   }
 
   freeaddrinfo(result);
   return fd;
 }
 
-} // namespace
+}  // namespace
 
-// TODO: the whole approach of dropping the lock is suboptimal and error prone, find an alternative
+// TODO: the whole approach of dropping the lock is suboptimal and error prone,
+// find an alternative
 
 // Get a shared_ptr to a new or preexisting Server
-std::shared_ptr<Server> connection_new(std::string address, const uint16_t port, const char *nickname)
-{
+std::shared_ptr<Server> connection_new(std::string address, const uint16_t port,
+                                       const char* nickname) {
   std::string key(address);
-  std::lock_guard<std::mutex> lock(conn_mtx);
-  DLOG(INFO) << "Initiating cache lookup for " << address.c_str() << '/' << port << '(' << nickname << ')';
+  std::unique_lock lock(conn_mtx);
+  DLOG(INFO) << "Initiating cache lookup for " << address.c_str() << '/' << port
+             << '(' << nickname << ')';
   if (auto it = conn_cache.find(key); it != conn_cache.end()) {
     auto& wptr = it->second;
     if (wptr.expired()) {
       DLOG(INFO) << "Entry expired, recreating";
       auto fd = connection_fd(key.c_str(), port);
-      // Due to releasing lock during the address resolution, possibly another thread succeeded in
-      // creating the entry, in that case we return it, otherwise we know we failed.
+      // Due to releasing lock during the address resolution, possibly another
+      // thread succeeded in creating the entry, in that case we return it,
+      // otherwise we know we failed.
       auto sptr = wptr.lock();
       if (fd < 0) {
-	if (sptr != nullptr) {
-	  DLOG(INFO) << "Resolution failed but entry was created";
-	  return sptr;
-	}
-	DLOG(ERROR) << "Failed to create socket fd";
-	return sptr;
+        if (sptr != nullptr) {
+          DLOG(INFO) << "Resolution failed but entry was created";
+          return sptr;
+        }
+        DLOG(ERROR) << "Failed to create socket fd";
+        return sptr;
       }
-      sptr = std::shared_ptr<Server>(new Server(fd, std::move(key), port, nickname), connection_delete);
+      sptr = std::shared_ptr<Server>(
+          new Server(fd, std::move(key), port, nickname), connection_delete);
       wptr = sptr;
       DLOG(INFO) << "Successfully created server";
       sptr->set_state(ServerState::kConnected);
@@ -164,13 +162,14 @@ std::shared_ptr<Server> connection_new(std::string address, const uint16_t port,
     auto fd = connection_fd(key.c_str(), port);
     if (fd < 0) {
       if (auto it = conn_cache.find(key); it != conn_cache.end()) {
-	DLOG(INFO) << "Resolution failed but entry was created";
-	return it->second.lock();
+        DLOG(INFO) << "Resolution failed but entry was created";
+        return it->second.lock();
       }
       DLOG(INFO) << "Failed to create socket fd";
       return nullptr;
     }
-    auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname), connection_delete);
+    auto sptr = std::shared_ptr<Server>(new Server(fd, key, port, nickname),
+                                        connection_delete);
     conn_cache[std::move(key)] = std::weak_ptr<Server>(sptr);
     DLOG(INFO) << "Successfully created server";
     sptr->set_state(ServerState::kConnected);
@@ -178,14 +177,13 @@ std::shared_ptr<Server> connection_new(std::string address, const uint16_t port,
   }
 }
 
-void connection_delete(const Server *s)
-{
+void connection_delete(const Server* s) {
   assert(s);
-  std::lock_guard<std::mutex> lock(conn_mtx);
+  std::unique_lock lock(conn_mtx);
   conn_cache.erase(s->get_address());
   DLOG(INFO) << "Erasing server from cache: ";
   s->dump_info();
   delete s;
 }
 
-} // namespace kbot
+}  // namespace kbot

@@ -18,6 +18,7 @@ namespace kbot {
 IRC::IRC(const int sockfd) : fd(sockfd)
 {
   DLOG(INFO) << "Constructing IRC Backend: " << *this;
+  std::vector<int> v;
 }
 
 IRC::~IRC()
