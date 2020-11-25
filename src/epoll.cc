@@ -16,7 +16,6 @@ namespace io {
 EpollManager::EpollManager(EpollManager &&m) {
   fd = m.fd;
   m.fd = -1;
-  events = std::move(m.events);
   fd_map = std::move(m.fd_map);
   static_events = std::move(m.static_events);
 }
@@ -26,7 +25,6 @@ EpollManager &EpollManager::operator=(EpollManager &&m) {
   fd = m.fd;
   m.fd = -1;
 
-  events = std::move(m.events);
   fd_map = std::move(m.fd_map);
   static_events = std::move(m.static_events);
   return *this;
@@ -34,7 +32,7 @@ EpollManager &EpollManager::operator=(EpollManager &&m) {
 
 EpollManager::~EpollManager() {
   for (auto &ctx : static_events) {
-    if (ctx.type == EpollStaticEvent::Exit) {
+    if (ctx.type == EpollStaticEvent::Type::Exit) {
       ctx.cb(ctx);
     }
   }
@@ -46,6 +44,11 @@ std::optional<EpollManager> EpollManager::createNew() {
     return std::nullopt;
   }
   return EpollManager{fd};
+}
+
+void EpollManager::registerStaticEvent(
+    EpollStaticEvent::Type type, std::function<void(EpollStaticEvent &)> cb) {
+  static_events.push_back(EpollStaticEvent{type, std::move(cb)});
 }
 
 bool EpollManager::registerFd(int fd, EventFlags events, userdata_un data,
@@ -89,7 +92,7 @@ bool EpollManager::modifyFdEvents(int fd, EventFlags events) {
 
 bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
   if ((uint32_t)config & EpollEventFullMask) {
-    throw std::logic_error("Event flags must be passed as config flags");
+    throw std::logic_error("Event flags must not be passed as config flags");
   }
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {

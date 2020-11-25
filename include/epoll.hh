@@ -11,7 +11,7 @@ namespace kbot {
 namespace io {
 
 struct EpollStaticEvent {
-  enum Type {
+  enum class Type {
     Pre = 0,
     Post = 1,
     Exit = 2,
@@ -19,9 +19,9 @@ struct EpollStaticEvent {
   explicit EpollStaticEvent(Type type,
                             std::function<void(EpollStaticEvent& self)> cb)
       : type(type), cb(std::move(cb)) {}
-  void preEnable() { type = Pre; }
-  void postEnable() { type = Post; }
-  void exitEnable() { type = Exit; }
+  void preEnable() { type = Type::Pre; }
+  void postEnable() { type = Type::Post; }
+  void exitEnable() { type = Type::Exit; }
   std::function<void(EpollStaticEvent& self)> cb;
 };
 
@@ -49,7 +49,6 @@ struct EpollContext {
 
 class EpollManager {
   int fd;
-  std::vector<struct epoll_event> events;
   std::map<int, EpollContext> fd_map;
   std::vector<EpollStaticEvent> static_events;
 
@@ -83,6 +82,8 @@ class EpollManager {
   ~EpollManager();
 
   static std::optional<EpollManager> createNew();
+  void registerStaticEvent(EpollStaticEvent::Type type,
+                           std::function<void(EpollStaticEvent& self)> cb);
   bool registerFd(int fd, EventFlags events, userdata_un data,
                   std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
