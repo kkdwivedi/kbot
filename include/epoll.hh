@@ -28,6 +28,7 @@ struct EpollStaticEvent {
 struct EpollContext {
   struct epoll_event ev;
   std::function<void(struct epoll_event)> cb;
+  bool enabled;
 
   uint32_t getConfigMask() {
     uint32_t mask = 0;
@@ -87,6 +88,8 @@ class EpollManager {
   bool registerFd(int fd, EventFlags events,
                   std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
+  bool enableFd(int fd);
+  bool disableFd(int fd);
   bool modifyFdEvents(int fd, EventFlags events);
   bool modifyFdConfig(int fd, ConfigFlags configs);
   bool modifyFdCallback(int fd,

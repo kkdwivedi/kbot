@@ -68,8 +68,27 @@ bool EpollManager::registerFd(int fd, EventFlags events,
   if (r < 0) {
     return false;
   }
-  it->second = {{(uint32_t)events | config, data}, std::move(callback)};
+  it->second = {{(uint32_t)events | config, data}, std::move(callback), true};
   return true;
+}
+
+bool EpollManager::enableFd(int fd) {
+  auto it = fd_map.find(fd);
+  if (it != fd_map.end()) {
+    return it->second.enabled = true;
+  } else {
+    return false;
+  }
+}
+
+bool EpollManager::disableFd(int fd) {
+  auto it = fd_map.find(fd);
+  if (it != fd_map.end()) {
+    it->second.enabled = false;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 bool EpollManager::modifyFdEvents(int fd, EventFlags events) {
@@ -166,7 +185,9 @@ int EpollManager::runEventLoop(int timeout = 0) {
         errno = ENOENT;
         return r = -1;
       } else {
-        it->second.cb(events_vec[i]);
+        if (it->second.enabled) {
+          it->second.cb(events_vec[i]);
+        }
       }
     }
 
@@ -181,6 +202,8 @@ int EpollManager::runEventLoop(int timeout = 0) {
 
   return 0;
 }
+
+// Event Sources
 
 }  // namespace io
 }  // namespace kbot
