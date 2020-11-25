@@ -129,6 +129,10 @@ bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
   if ((uint32_t)config & EpollEventFullMask) {
     throw std::logic_error("Event flags must not be passed as config flags");
   }
+  if ((uint32_t)config & EPOLLEXCLUSIVE) {
+    throw std::logic_error(
+        "EpollExclusive cannot be passed during a modify operation");
+  }
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
     errno = ENOENT;
@@ -198,10 +202,8 @@ int EpollManager::runEventLoop(int timeout = 0) {
         // fd is not in map, but being polled, something is borked...
         errno = ENOENT;
         return r = -1;
-      } else {
-        if (it->second.enabled) {
-          it->second.cb(events_vec[i]);
-        }
+      } else if (it->second.enabled) {
+        it->second.cb(events_vec[i]);
       }
     }
 
@@ -216,8 +218,6 @@ int EpollManager::runEventLoop(int timeout = 0) {
 
   return 0;
 }
-
-// Event Sources
 
 }  // namespace io
 }  // namespace kbot
