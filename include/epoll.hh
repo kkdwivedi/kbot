@@ -89,7 +89,8 @@ class EpollManager {
                   ConfigFlags config);
   bool modifyFdEvents(int fd, EventFlags events);
   bool modifyFdConfig(int fd, ConfigFlags configs);
-  bool modifyFdCallback(std::function<void(struct epoll_event)> callback);
+  bool modifyFdCallback(int fd,
+                        std::function<void(struct epoll_event)> callback);
   bool deleteFd(int fd);
 };
 

@@ -111,7 +111,7 @@ bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
 }
 
 bool EpollManager::modifyFdCallback(
-    std::function<void(struct epoll_event)> callback) {
+    int fd, std::function<void(struct epoll_event)> callback) {
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
     errno = ENOENT;
