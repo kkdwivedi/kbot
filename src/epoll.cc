@@ -75,6 +75,13 @@ bool EpollManager::registerFd(int fd, EventFlags events,
 bool EpollManager::enableFd(int fd) {
   auto it = fd_map.find(fd);
   if (it != fd_map.end()) {
+    if (it->second.enabled == false) {
+      int r = epoll_ctl(this->fd, EPOLL_CTL_ADD, fd, &it->second.ev);
+      if (r < 0) {
+        assert(errno != EEXIST);
+        return false;
+      }
+    }
     return it->second.enabled = true;
   } else {
     return false;
@@ -84,6 +91,13 @@ bool EpollManager::enableFd(int fd) {
 bool EpollManager::disableFd(int fd) {
   auto it = fd_map.find(fd);
   if (it != fd_map.end()) {
+    if (it->second.enabled == true) {
+      int r = epoll_ctl(this->fd, EPOLL_CTL_DEL, fd, &it->second.ev);
+      if (r < 0) {
+        assert(errno != ENOENT);
+        return false;
+      }
+    }
     it->second.enabled = false;
     return true;
   } else {

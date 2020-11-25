@@ -101,9 +101,11 @@ class EpollManager {
 // clang-format off
 template <class T>
 concept EventSource = requires (T t) {
-  { t.getEpollContext() } -> std::same_as<EpollContext>;
+  { t.get() } -> std::same_as<EpollContext>;
 };
 // clang-format on
+
+// Event Sources
 
 }  // namespace io
 }  // namespace kbot
