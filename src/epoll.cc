@@ -2,6 +2,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include <cassert>
 #include <epoll.hh>
 #include <functional>
 #include <map>
@@ -51,7 +52,7 @@ void EpollManager::registerStaticEvent(
   static_events.push_back(EpollStaticEvent{type, std::move(cb)});
 }
 
-bool EpollManager::registerFd(int fd, EventFlags events, userdata_un data,
+bool EpollManager::registerFd(int fd, EventFlags events,
                               std::function<void(struct epoll_event)> callback,
                               ConfigFlags config) {
   auto it = fd_map.find(fd);
@@ -59,6 +60,7 @@ bool EpollManager::registerFd(int fd, EventFlags events, userdata_un data,
     errno = EEXIST;
     return false;
   }
+  userdata_un data = {.fd = fd};
   struct epoll_event ev {
     ((uint32_t)events | config), data
   };
@@ -133,6 +135,51 @@ bool EpollManager::deleteFd(int fd) {
     return false;
   }
   return true;
+}
+
+int EpollManager::runEventLoop(int timeout = 0) {
+  for (auto &ctx : static_events) {
+    if (ctx.type == EpollStaticEvent::Type::Pre) {
+      ctx.cb(ctx);
+    }
+  }
+
+  static std::vector<struct epoll_event> events_vec;
+  events_vec.resize(fd_map.size());
+
+  for (;;) {
+    int r = epoll_wait(fd, events_vec.data(),
+                       static_cast<int>(events_vec.size()), timeout);
+    if (r < 0) {
+      if (errno != EINTR) {
+        return r;
+      } else {
+        continue;
+      }
+    }
+
+    assert(r);
+    for (size_t i = 0; i < (size_t)r; i++) {
+      auto it = fd_map.find(events_vec[i].data.fd);
+      if (it == fd_map.end()) {
+        // fd is not in map, but being polled, something is borked...
+        errno = ENOENT;
+        return r = -1;
+      } else {
+        it->second.cb(events_vec[i]);
+      }
+    }
+
+    break;
+  }
+
+  for (auto &ctx : static_events) {
+    if (ctx.type == EpollStaticEvent::Type::Post) {
+      ctx.cb(ctx);
+    }
+  }
+
+  return 0;
 }
 
 }  // namespace io

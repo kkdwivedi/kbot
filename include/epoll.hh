@@ -84,7 +84,7 @@ class EpollManager {
   static std::optional<EpollManager> createNew();
   void registerStaticEvent(EpollStaticEvent::Type type,
                            std::function<void(EpollStaticEvent& self)> cb);
-  bool registerFd(int fd, EventFlags events, userdata_un data,
+  bool registerFd(int fd, EventFlags events,
                   std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
   bool modifyFdEvents(int fd, EventFlags events);
@@ -92,6 +92,7 @@ class EpollManager {
   bool modifyFdCallback(int fd,
                         std::function<void(struct epoll_event)> callback);
   bool deleteFd(int fd);
+  int runEventLoop(int timeout);
 };
 
 // clang-format off
