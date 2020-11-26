@@ -45,7 +45,7 @@ Server::ChannelID Server::join_channel(const std::string& channel) {
   std::unique_lock lock(chan_mtx);
   ChannelID id = SIZE_MAX;
   if (auto it = chan_string_map.find(channel); it == chan_string_map.end()) {
-    auto r = IRC::JOIN(channel);
+    auto r = IRC::Join(channel);
     if (r < 0) {
       LOG(ERROR) << "Failed to join channel: " << channel;
       return id;
@@ -72,7 +72,7 @@ void Server::part_channel(Server::ChannelID id) {
   auto it = chan_id_map.find(id);
   assert(it != chan_id_map.end());
   auto& chan_str = it->second->get_name();
-  auto r = IRC::PART(chan_str);
+  auto r = IRC::Part(chan_str);
   if (r < 0) {
     LOG(ERROR) << "Failed to part channel: " << chan_str;
     return;

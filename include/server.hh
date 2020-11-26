@@ -69,7 +69,7 @@ class Server : public IRC {
   Server& operator=(const Server&) = delete;
   Server(Server&&) = delete;
   Server& operator=(Server&&) = delete;
-  ~Server() { IRC::QUIT(); }
+  ~Server() { IRC::Quit(); }
   // Static Methods
   static constexpr const char* state_to_string(const enum ServerState state) {
     return ServerStateStringTable[static_cast<int>(state)];
@@ -92,7 +92,7 @@ class Server : public IRC {
   }
   void set_nickname(std::string_view nickname_) const {
     std::lock_guard<std::mutex> lock(nick_mtx);
-    auto r = IRC::NICK(nickname_.data());
+    auto r = IRC::Nick(nickname_.data());
     if (r < 0) {
       LOG(ERROR) << "Failed to send NICK command for nickname: " << nickname;
       return;
@@ -121,7 +121,7 @@ class Channel {
   ~Channel() = default;
   const std::string& get_name() { return name; }
   std::size_t get_id() { return id; }
-  bool send_msg(std::string_view msg) { return !!sref.PRIVMSG(name, msg); }
+  bool send_msg(std::string_view msg) { return !!sref.PrivMsg(name, msg); }
   std::string get_topic();
   bool set_topic(std::string_view topic);
 };

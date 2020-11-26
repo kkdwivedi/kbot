@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
   google::InitGoogleLogging(argv[0]);
   int opt = -1;
-  while ((opt = getopt(argc, argv, "s:n:p:c:x::l")) != -1) {
+  while ((opt = getopt(argc, argv, "hs:n:p:c:x::l")) != -1) {
     switch (opt) {
       case 's':
         address = optarg;
@@ -82,8 +82,14 @@ int main(int argc, char *argv[]) {
     usage();
   }
 
-  std::jthread root(kbot::worker_run, ptr);
-  auto r = ptr->LOGIN(nickname);
+  auto root = kbot::LaunchServerThread(
+      [](std::shared_ptr<kbot::Server> ptr) {
+        auto m = kbot::Manager::CreateNew(ptr->get_address());
+        kbot::worker_run(std::move(m), ptr);
+      },
+      ptr);
+
+  auto r = ptr->Login(nickname);
   if (r < 0) {
     LOG(INFO) << "LOGIN failed";
     return 0;
@@ -91,7 +97,7 @@ int main(int argc, char *argv[]) {
   auto id = ptr->join_channel(channel);
   ptr->send_channel(id, "Hello World!");
   ptr->dump_info();
-  kbot::supervisor_run();
+  root.join();
   LOG(INFO) << "Shutting down";
 
   return 0;

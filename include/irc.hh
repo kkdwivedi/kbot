@@ -45,18 +45,18 @@ class IRC {
   IRC& operator=(IRC&&) = delete;
   virtual ~IRC();
   // Static Methods
-  static constexpr const char* state_to_string(const enum IRCService s);
+  static constexpr const char* StateToString(const enum IRCService s);
   // Command API
-  ssize_t LOGIN(std::string_view nickname,
+  ssize_t Login(std::string_view nickname,
                 std::string_view password = "") const;
-  ssize_t NICK(std::string_view nickname) const;
-  ssize_t JOIN(std::string_view channel) const;
-  ssize_t PART(std::string_view channel) const;
-  ssize_t PRIVMSG(std::string_view recipient, std::string_view msg) const;
-  ssize_t QUIT(std::string_view msg = "") const;
+  ssize_t Nick(std::string_view nickname) const;
+  ssize_t Join(std::string_view channel) const;
+  ssize_t Part(std::string_view channel) const;
+  ssize_t PrivMsg(std::string_view recipient, std::string_view msg) const;
+  ssize_t Quit(std::string_view msg = "") const;
   // Low-level API
-  ssize_t send_msg(std::string_view msg) const;
-  std::string recv_msg() const;
+  ssize_t SendMsg(std::string_view msg) const;
+  std::string RecvMsg() const;
   // Friends/Misc
   friend std::ostream& operator<<(std::ostream& o, const IRC& i);
 };
@@ -171,18 +171,18 @@ class IRCMessage {
   IRCMessage& operator=(IRCMessage&&) = delete;
   virtual ~IRCMessage() = default;
 
-  std::string_view get_tags() const { return tags; }
+  std::string_view GetTags() const { return tags; }
 
   const std::vector<std::pair<std::string_view, std::string_view>>& get_tag_kv()
       const {
     return tag_kv;
   }
 
-  std::string_view get_source() const { return source; }
+  std::string_view GetSource() const { return source; }
 
-  std::string_view get_command() const { return command; }
+  std::string_view GetCommand() const { return command; }
 
-  const std::vector<std::string_view>& get_parameters() const {
+  const std::vector<std::string_view>& GetParameters() const {
     return param_vec;
   }
 
@@ -202,7 +202,7 @@ class IRCMessagePrivmsg : public IRCMessage {
   IRCMessagePrivmsg(std::string_view l)
       : IRCMessage(std::move(l), IRCMessageType::PRIVMSG) {}
   IRCMessagePrivmsg(IRCMessage&& m) : IRCMessage(std::move(m)) {}
-  IRCUser get_user() const {
+  IRCUser GetUser() const {
     IRCUser u = {};
     size_t src_size = source.size();
     size_t cur = 0;
@@ -222,14 +222,14 @@ class IRCMessagePrivmsg : public IRCMessage {
     u.channel = std::string_view(param_vec.at(0));
     return u;
   }
-  std::string_view get_channel() const { return param_vec.at(0); }
+  std::string_view GetChannel() const { return param_vec.at(0); }
 };
 
 // Predicate functions
 
-namespace message {
+namespace Message {
 
-inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask) {
+inline bool IsUserCapable(const IRCUser& u, const uint64_t cap_mask) {
   // TODO: store admins to a persistent DB
   static uint64_t kkd_cap_mask = UINT64_MAX;
   if (u.nickname == "kkd" && u.username == "~memxor" &&
@@ -239,32 +239,31 @@ inline bool is_user_capable(const IRCUser& u, const uint64_t cap_mask) {
   return false;
 }
 
-inline bool is_user_message(std::string_view source) {
+inline bool IsUserMessage(std::string_view source) {
   if (source.find('!') == source.npos) return false;
   return true;
 }
 
-inline bool is_server_message(std::string_view source) {
-  return !is_user_message(std::move(source));
+inline bool IsServerMessage(std::string_view source) {
+  return !IsUserMessage(std::move(source));
 }
 
-inline bool is_quit_message(const IRCMessage& m) {
-  if (is_server_message(m.get_source())) return false;
-  auto& params = m.get_parameters();
+inline bool IsQuitMessage(const IRCMessage& m) {
+  if (IsServerMessage(m.GetSource())) return false;
+  auto& params = m.GetParameters();
   if (params.size() > 1 && !(params.at(1) == ":,quit")) return false;
   if (m.message_type != IRCMessageType::PRIVMSG) return false;
-  if (!is_user_capable(static_cast<const IRCMessagePrivmsg&>(m).get_user(),
-                       kQuit))
+  if (!IsUserCapable(static_cast<const IRCMessagePrivmsg&>(m).GetUser(), kQuit))
     return false;
   return true;
 }
 
-inline bool is_privmsg_message(const IRCMessage& m) {
-  if (is_server_message(m.get_source())) return false;
-  if (m.get_command() != "PRIVMSG") return false;
+inline bool IsPrivMsgMessage(const IRCMessage& m) {
+  if (IsServerMessage(m.GetSource())) return false;
+  if (m.GetCommand() != "PRIVMSG") return false;
   return true;
 }
 
-}  // namespace message
+}  // namespace Message
 
 }  // namespace kbot

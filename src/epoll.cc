@@ -39,7 +39,7 @@ EpollManager::~EpollManager() {
   }
 }
 
-std::optional<EpollManager> EpollManager::createNew() {
+std::optional<EpollManager> EpollManager::CreateNew() {
   int fd = epoll_create1(EPOLL_CLOEXEC);
   if (fd < 0) {
     return std::nullopt;
@@ -47,12 +47,12 @@ std::optional<EpollManager> EpollManager::createNew() {
   return EpollManager{fd};
 }
 
-void EpollManager::registerStaticEvent(
+void EpollManager::RegisterStaticEvent(
     EpollStaticEvent::Type type, std::function<void(EpollStaticEvent &)> cb) {
   static_events.push_back(EpollStaticEvent{type, std::move(cb)});
 }
 
-bool EpollManager::registerFd(int fd, EventFlags events,
+bool EpollManager::RegisterFd(int fd, EventFlags events,
                               std::function<void(struct epoll_event)> callback,
                               ConfigFlags config) {
   auto it = fd_map.find(fd);
@@ -72,7 +72,7 @@ bool EpollManager::registerFd(int fd, EventFlags events,
   return true;
 }
 
-bool EpollManager::enableFd(int fd) {
+bool EpollManager::EnableFd(int fd) {
   auto it = fd_map.find(fd);
   if (it != fd_map.end()) {
     if (it->second.enabled == false) {
@@ -88,7 +88,7 @@ bool EpollManager::enableFd(int fd) {
   }
 }
 
-bool EpollManager::disableFd(int fd) {
+bool EpollManager::DisableFd(int fd) {
   auto it = fd_map.find(fd);
   if (it != fd_map.end()) {
     if (it->second.enabled == true) {
@@ -105,7 +105,7 @@ bool EpollManager::disableFd(int fd) {
   }
 }
 
-bool EpollManager::modifyFdEvents(int fd, EventFlags events) {
+bool EpollManager::ModifyFdEvents(int fd, EventFlags events) {
   if ((uint32_t)events & EpollConfigFullMask) {
     throw std::logic_error("Config flags must not be passed as event flags");
   }
@@ -116,7 +116,7 @@ bool EpollManager::modifyFdEvents(int fd, EventFlags events) {
   }
   auto &ctx = it->second;
   auto ev = ctx.ev;
-  ev.events = ctx.getConfigMask() | events;
+  ev.events = ctx.GetConfigMask() | events;
   int r = epoll_ctl(this->fd, EPOLL_CTL_MOD, fd, &ev);
   if (r < 0) {
     return false;
@@ -125,7 +125,7 @@ bool EpollManager::modifyFdEvents(int fd, EventFlags events) {
   return true;
 }
 
-bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
+bool EpollManager::ModifyFdConfig(int fd, ConfigFlags config) {
   if ((uint32_t)config & EpollEventFullMask) {
     throw std::logic_error("Event flags must not be passed as config flags");
   }
@@ -140,7 +140,7 @@ bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
   }
   auto &ctx = it->second;
   auto ev = ctx.ev;
-  ev.events = ctx.getEventMask() | config;
+  ev.events = ctx.GetEventMask() | config;
   int r = epoll_ctl(this->fd, EPOLL_CTL_MOD, fd, &ev);
   if (r < 0) {
     return false;
@@ -149,7 +149,7 @@ bool EpollManager::modifyFdConfig(int fd, ConfigFlags config) {
   return true;
 }
 
-bool EpollManager::modifyFdCallback(
+bool EpollManager::ModifyFdCallback(
     int fd, std::function<void(struct epoll_event)> callback) {
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
@@ -160,7 +160,7 @@ bool EpollManager::modifyFdCallback(
   return true;
 }
 
-bool EpollManager::deleteFd(int fd) {
+bool EpollManager::DeleteFd(int fd) {
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
     errno = ENOENT;
@@ -174,7 +174,7 @@ bool EpollManager::deleteFd(int fd) {
   return true;
 }
 
-int EpollManager::runEventLoop(int timeout = 0) {
+int EpollManager::RunEventLoop(int timeout = 0) {
   for (auto &ctx : static_events) {
     if (ctx.type == EpollStaticEvent::Type::Pre) {
       ctx.cb(ctx);

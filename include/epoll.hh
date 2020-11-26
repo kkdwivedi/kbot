@@ -19,9 +19,9 @@ struct EpollStaticEvent {
   explicit EpollStaticEvent(Type type,
                             std::function<void(EpollStaticEvent& self)> cb)
       : type(type), cb(std::move(cb)) {}
-  void preEnable() { type = Type::Pre; }
-  void postEnable() { type = Type::Post; }
-  void exitEnable() { type = Type::Exit; }
+  void PreEnable() { type = Type::Pre; }
+  void PostEnable() { type = Type::Post; }
+  void ExitEnable() { type = Type::Exit; }
   std::function<void(EpollStaticEvent& self)> cb;
 };
 
@@ -30,7 +30,7 @@ struct EpollContext {
   std::function<void(struct epoll_event)> cb;
   bool enabled;
 
-  uint32_t getConfigMask() {
+  uint32_t GetConfigMask() {
     uint32_t mask = 0;
     if (ev.events & EPOLLET) mask |= EPOLLET;
     if (ev.events & EPOLLONESHOT) mask |= EPOLLONESHOT;
@@ -38,7 +38,7 @@ struct EpollContext {
     if (ev.events & EPOLLEXCLUSIVE) mask |= EPOLLEXCLUSIVE;
     return mask;
   }
-  uint32_t getEventMask() {
+  uint32_t GetEventMask() {
     uint32_t mask = 0;
     if (ev.events & EPOLLIN) mask |= EPOLLIN;
     if (ev.events & EPOLLOUT) mask |= EPOLLOUT;
@@ -82,20 +82,20 @@ class EpollManager {
   EpollManager& operator=(EpollManager&&);
   ~EpollManager();
 
-  static std::optional<EpollManager> createNew();
-  void registerStaticEvent(EpollStaticEvent::Type type,
+  static std::optional<EpollManager> CreateNew();
+  void RegisterStaticEvent(EpollStaticEvent::Type type,
                            std::function<void(EpollStaticEvent& self)> cb);
-  bool registerFd(int fd, EventFlags events,
+  bool RegisterFd(int fd, EventFlags events,
                   std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
-  bool enableFd(int fd);
-  bool disableFd(int fd);
-  bool modifyFdEvents(int fd, EventFlags events);
-  bool modifyFdConfig(int fd, ConfigFlags configs);
-  bool modifyFdCallback(int fd,
+  bool EnableFd(int fd);
+  bool DisableFd(int fd);
+  bool ModifyFdEvents(int fd, EventFlags events);
+  bool ModifyFdConfig(int fd, ConfigFlags configs);
+  bool ModifyFdCallback(int fd,
                         std::function<void(struct epoll_event)> callback);
-  bool deleteFd(int fd);
-  int runEventLoop(int timeout);
+  bool DeleteFd(int fd);
+  int RunEventLoop(int timeout);
 };
 
 }  // namespace io

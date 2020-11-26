@@ -9,10 +9,10 @@ TEST(IRCMessage, FullParsing1) {
   const kbot::IRCMessage m(
       "@url=;netsplit=tur,ty :dan!d@localhost PRIVMSG #chan :hey what's up!");
   std::cout << m;
-  ASSERT_EQ(m.get_tags(), "url=;netsplit=tur,ty");
-  ASSERT_EQ(m.get_source(), "dan!d@localhost");
-  ASSERT_EQ(m.get_command(), "PRIVMSG");
-  auto& vec = m.get_parameters();
+  ASSERT_EQ(m.GetTags(), "url=;netsplit=tur,ty");
+  ASSERT_EQ(m.GetSource(), "dan!d@localhost");
+  ASSERT_EQ(m.GetCommand(), "PRIVMSG");
+  auto& vec = m.GetParameters();
   ASSERT_EQ(vec.size(), 4);
   ASSERT_EQ(vec[0], "#chan");
   ASSERT_EQ(vec[1], ":hey");
@@ -46,23 +46,23 @@ TEST(IRCMessage, BadMessage1) {
 
 TEST(IRCMessage, UserRecord1) {
   const kbot::IRCMessagePrivmsg m(":dan!~d@localhost/foo command param");
-  auto u = m.get_user();
+  auto u = m.GetUser();
   ASSERT_EQ(u.nickname, "dan");
   ASSERT_EQ(u.username, "~d");
   ASSERT_EQ(u.hostname, "localhost/foo");
-  ASSERT_THROW(kbot::IRCMessagePrivmsg(":source. command param").get_user(),
+  ASSERT_THROW(kbot::IRCMessagePrivmsg(":source. command param").GetUser(),
                std::runtime_error);
   const kbot::IRCMessagePrivmsg m1(":dan!~d command param");
-  ASSERT_EQ(m1.get_user().nickname, "dan");
-  ASSERT_EQ(m1.get_user().username, "~d");
-  ASSERT_EQ(m1.get_user().hostname, "");
+  ASSERT_EQ(m1.GetUser().nickname, "dan");
+  ASSERT_EQ(m1.GetUser().username, "~d");
+  ASSERT_EQ(m1.GetUser().hostname, "");
   const kbot::IRCMessagePrivmsg m2(":dan! command param");
-  ASSERT_EQ(m2.get_user().nickname, "dan");
-  ASSERT_EQ(m2.get_user().username, "");
-  ASSERT_EQ(m2.get_user().hostname, "");
+  ASSERT_EQ(m2.GetUser().nickname, "dan");
+  ASSERT_EQ(m2.GetUser().username, "");
+  ASSERT_EQ(m2.GetUser().hostname, "");
   ASSERT_EQ(
-      kbot::IRCMessagePrivmsg(":dan!~d@ command param").get_user().hostname,
-      m2.get_user().hostname);
+      kbot::IRCMessagePrivmsg(":dan!~d@ command param").GetUser().hostname,
+      m2.GetUser().hostname);
 }
 
 int main() {

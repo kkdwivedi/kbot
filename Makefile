@@ -2,7 +2,8 @@ CXX = clang++ -std=c++20 -D_GNU_SOURCE -O3
 
 INCLUDE_ALL = -Iinclude
 CFLAGS = -Wall -Wextra -fstrict-aliasing -Wstrict-aliasing=2 $(INCLUDE_ALL) \
-	 -Wconversion -Wsign-conversion -Wpedantic -Wno-gnu-zero-variadic-macro-arguments -lglog
+	 -Wconversion -Wsign-conversion -Wpedantic -Wno-gnu-zero-variadic-macro-arguments -lglog \
+	 -lpthread
 CFLAGS_DEBUG = -ggdb -fsanitize=address,undefined
 TEST_LIB = -lgtest
 
@@ -14,7 +15,7 @@ OBJ_CXX = $(CXX) $(INCLUDE_ALL) $(CFLAGS) -c
 BIN_C = $(CC) $(INCLUDE_ALL) $(CFLAGS)
 BIN_CXX = $(CXX) $(INCLUDE_ALL) $(CFLAGS)
 
-FILE_LIST = src/main.cc src/server.cc src/irc.cc src/loop.cc
+FILE_LIST = src/main.cc src/server.cc src/irc.cc src/loop.cc src/epoll.cc
 
 default: setup kbot
 
