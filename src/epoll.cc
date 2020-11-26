@@ -68,7 +68,7 @@ bool EpollManager::registerFd(int fd, EventFlags events,
   if (r < 0) {
     return false;
   }
-  it->second = {{(uint32_t)events | config, data}, std::move(callback), true};
+  fd_map[fd] = EpollContext{ev, std::move(callback), true};
   return true;
 }
 
