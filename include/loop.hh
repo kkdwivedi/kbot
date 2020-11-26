@@ -1,18 +1,57 @@
 #pragma once
 
+#include <glog/logging.h>
 #include <semaphore.h>
+#include <signal.h>
+#include <sys/signalfd.h>
 
+#include <atomic>
 #include <cassert>
 #include <deque>
+#include <epoll.hh>
 #include <mutex>
-
-#include "server.hh"
+#include <server.hh>
+#include <utility>
 
 namespace kbot {
 
-// Threads request the supervisor to launch a new thread for a new server
-// object, as users with admin privileges can request a new connection from any
-// of the existing connections.
+// NOTE: Make sure createNew is called in context of thread owning
+// the instance. This essentially means that copying or moving this
+// instance across threads has broken semantics. Threads owning these
+// instances handle all signals through the respective signalfd anyway.
+class Manager {
+  io::EpollManager epm;
+  int sigfd = -1;
+  sigset_t cur_set;
+  std::map<int, std::function<void(struct signalfd_siginfo&)>> signalfd_sig_map;
+  static inline std::atomic<int> sigId = SIGRTMIN;
+
+  explicit Manager(io::EpollManager&& epm, int curSigId) : epm(std::move(epm)) {
+    sigemptyset(&cur_set);
+    sigaddset(&cur_set, curSigId);
+  }
+  bool initializeSignalFd();
+
+ public:
+  Manager(const Manager&) = delete;
+  Manager& operator=(const Manager&) = delete;
+  Manager(Manager&& m) : epm(std::move(m.epm)) {
+    sigfd = m.sigfd;
+    m.sigfd = -1;
+  }
+  Manager& operator=(Manager&&) = delete;
+  ~Manager() {
+    epm.deleteFd(sigfd);
+    close(sigfd);
+    sigId.fetch_sub(1, std::memory_order_relaxed);
+  }
+
+  static Manager createNew(std::string_view server_name);
+  bool registerSignalEvent(
+      int signal, std::function<void(struct signalfd_siginfo&)> handler);
+  bool deleteSignalEvent(int signal);
+};
+
 class ThreadRequest {
   std::mutex vec_mtx;
   std::deque<std::shared_ptr<Server>> req_deq;

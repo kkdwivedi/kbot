@@ -49,7 +49,7 @@ struct EpollContext {
 };
 
 class EpollManager {
-  int fd;
+  int fd = -1;
   std::map<int, EpollContext> fd_map;
   std::vector<EpollStaticEvent> static_events;
 
@@ -97,15 +97,6 @@ class EpollManager {
   bool deleteFd(int fd);
   int runEventLoop(int timeout);
 };
-
-// clang-format off
-template <class T>
-concept EventSource = requires (T t) {
-  { t.get() } -> std::same_as<EpollContext>;
-};
-// clang-format on
-
-// Event Sources
 
 }  // namespace io
 }  // namespace kbot
