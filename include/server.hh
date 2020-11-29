@@ -7,6 +7,7 @@
 #include <irc.hh>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -46,88 +47,76 @@ constexpr const char* const ChannelStateStringTable[ChannelStateMax] = {
     "Member", "Voiced", "HalfOperator", "Operator", "Owner", "Invalid",
 };
 
-class Channel;
+struct Channel;
 
 class Server : public IRC {
-  mutable std::atomic<ServerState> state = ServerState::kDisconnected;
-  const std::string address;
-  const uint16_t port;
-  mutable std::shared_mutex chan_mtx;
-  std::unordered_map<std::size_t, std::unique_ptr<Channel>> chan_id_map;
-  std::unordered_map<std::string, std::size_t> chan_string_map;
-  std::size_t chan_id = 0;
+  std::atomic<ServerState> state = ServerState::kDisconnected;
+  std::string address;
+  uint16_t port;
+  std::shared_mutex chan_mtx;
+  std::unordered_map<std::string, std::unique_ptr<Channel>> chan_map;
+  std::mutex nick_mtx;
+  std::string nickname;
 
  public:
-  mutable std::mutex nick_mtx;
-  mutable std::string nickname;
-
-  using ChannelID = std::size_t;
-  explicit Server(const int sockfd, const std::string addr,
-                  const uint16_t portnum, const char* nick)
-      : IRC(sockfd), address(addr), port(portnum), nickname(nick) {}
+  explicit Server(int sockfd, std::string address, uint16_t port,
+                  const char* nickname)
+      : IRC(sockfd),
+        address(std::move(address)),
+        port(port),
+        nickname(nickname) {}
   Server(const Server&) = delete;
   Server& operator=(const Server&) = delete;
-  Server(Server&&) = delete;
+  Server(Server&&);
   Server& operator=(Server&&) = delete;
-  ~Server() { IRC::Quit(); }
+  ~Server() { IRC::Quit("Goodbye cruel world!"); }
   // Static Methods
-  static constexpr const char* state_to_string(const enum ServerState state) {
+  static constexpr const char* StateToString(const enum ServerState state) {
     return ServerStateStringTable[static_cast<int>(state)];
   }
   // Basic API
-  void dump_info() const;
-  ServerState get_state() const {
-    return state.load(std::memory_order_relaxed);
-  }
-  void set_state(const ServerState state_) const;
-  const std::string& get_address() const { return address; }
-  uint16_t get_port() const { return port; }
-  const std::string& get_nickname() const {
-    std::lock_guard<std::mutex> lock(nick_mtx);
+  void DumpInfo();
+  ServerState GetState() { return state.load(std::memory_order_relaxed); }
+  void SetState(const ServerState state);
+  std::string GetAddress() { return address; }
+  uint16_t GetPort() const { return port; }
+  const std::string& GetNickname() {
+    std::unique_lock lock(nick_mtx);
     return nickname;
   }
-  void update_nickname(std::string_view nickname_) const {
-    std::lock_guard<std::mutex> lock(nick_mtx);
+  void UpdateNickname(std::string_view nickname_) {
+    std::unique_lock lock(nick_mtx);
     nickname = nickname_;
   }
-  void set_nickname(std::string_view nickname_) const {
-    std::lock_guard<std::mutex> lock(nick_mtx);
-    auto r = IRC::Nick(nickname_.data());
+  void SetNickname(std::string_view nickname_) {
+    ssize_t r;
+    {
+      std::unique_lock lock(nick_mtx);
+      r = IRC::Nick(nickname_.data());
+    }
     if (r < 0) {
-      LOG(ERROR) << "Failed to send NICK command for nickname: " << nickname;
+      LOG(ERROR) << "Failed to initiate change to nickname: " << nickname_;
       return;
     }
   }
   // Channel API
-  ChannelID join_channel(const std::string& channel);
-  bool send_channel(ChannelID id, std::string_view msg);
-  bool set_topic(ChannelID id, std::string_view topic);
-  std::string get_topic(ChannelID id);
-  void part_channel(ChannelID id);
+  void JoinChannel(std::string_view channel);
+  void UpdateChannel(std::string_view channel);
+  bool SendChannel(std::string_view channel, std::string_view msg);
+  bool SetTopic(std::string_view channel, std::string_view topic);
+  std::string GetTopic(std::string_view channel);
+  void PartChannel(std::string_view channel);
 };
 
-class Channel {
-  Server& sref;
-  const std::string name;
-  std::size_t id;
-
- public:
-  explicit Channel(Server& s, std::string_view namesv, std::size_t _id)
-      : sref(s), name(namesv), id(_id) {}
+struct Channel {
+  Channel() = default;
   Channel(const Channel&) = delete;
   Channel& operator=(const Channel&) = delete;
   Channel(Channel&&) = delete;
   Channel& operator=(Channel&&) = delete;
   ~Channel() = default;
-  const std::string& get_name() { return name; }
-  std::size_t get_id() { return id; }
-  bool send_msg(std::string_view msg) { return !!sref.PrivMsg(name, msg); }
-  std::string get_topic();
-  bool set_topic(std::string_view topic);
 };
 
-std::shared_ptr<Server> connection_new(std::string, const uint16_t,
-                                       const char*);
-void connection_delete(const Server*);
+std::optional<Server> ConnectionNew(std::string, uint16_t, const char*);
 
 }  // namespace kbot

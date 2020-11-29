@@ -1,4 +1,5 @@
 #include <glog/logging.h>
+#include <poll.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -11,17 +12,19 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace kbot {
 
-IRC::IRC(const int sockfd) : fd(sockfd) {
+IRC::IRC(int sockfd) : fd(sockfd) {
   DLOG(INFO) << "Constructing IRC Backend: " << *this;
-  std::vector<int> v;
 }
 
 IRC::~IRC() {
-  DLOG(INFO) << "Destructing IRC Backend: " << *this;
-  close(fd);
+  if (fd >= 0) {
+    DLOG(INFO) << "Destructing IRC Backend: " << *this;
+    close(fd);
+  }
 }
 
 constexpr const char* IRC::StateToString(enum IRCService s) {
@@ -31,11 +34,11 @@ constexpr const char* IRC::StateToString(enum IRCService s) {
 ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
   ssize_t fail = 0;
   std::string buf;
-  buf += "\rUSER ";
-  buf += nickname;
-  buf += " 0 * :";
-  buf += "nickname";
-  buf += "\r\n";
+  buf.append("\rUSER ")
+      .append(nickname)
+      .append(" 0 * :")
+      .append(nickname)
+      .append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) {
     PLOG(ERROR) << "Failed to send USER LOGIN message";
@@ -56,9 +59,7 @@ ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
 
 ssize_t IRC::Nick(std::string_view nickname) const {
   std::string buf;
-  buf += "\rNICK ";
-  buf += nickname;
-  buf += "\r\n";
+  buf.append("\rNICK ").append(nickname).append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send NICK message";
   return r;
@@ -66,9 +67,7 @@ ssize_t IRC::Nick(std::string_view nickname) const {
 
 ssize_t IRC::Join(std::string_view channel) const {
   std::string buf;
-  buf += "\rJOIN ";
-  buf += channel;
-  buf += "\r\n";
+  buf.append("\rJOIN ").append(channel).append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send JOIN message";
   return r;
@@ -76,9 +75,7 @@ ssize_t IRC::Join(std::string_view channel) const {
 
 ssize_t IRC::Part(std::string_view channel) const {
   std::string buf;
-  buf += "\rPART ";
-  buf += channel;
-  buf += "\r\n";
+  buf.append("\rPART ").append(channel).append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send PART message";
   return r;
@@ -86,24 +83,33 @@ ssize_t IRC::Part(std::string_view channel) const {
 
 ssize_t IRC::PrivMsg(std::string_view recipient, std::string_view msg) const {
   std::string buf;
-  buf += "\rPRIVMSG ";
-  buf += recipient;
-  buf += " :";
-  buf += msg;
-  buf += "\r\n";
+  buf.append("\rPRIVMSG ")
+      .append(recipient)
+      .append(" :")
+      .append(msg)
+      .append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send PRIVMSG message";
   return r;
 }
 
 ssize_t IRC::Quit(std::string_view msg) const {
-  std::string buf;
-  buf += "\rQUIT :";
-  buf += msg;
-  buf += "\r\n";
-  auto r = SendMsg(buf);
-  if (r < 0) PLOG(ERROR) << "Failed to send QUIT message";
-  return r;
+  if (fd >= 0) {
+    std::string buf;
+    buf.append("\rQUIT :").append(msg).append("\r\n");
+    auto r = SendMsg(buf);
+    if (r < 0) {
+      PLOG(ERROR) << "Failed to send QUIT message";
+    } else {
+      struct pollfd pfd {
+        .fd = this->fd, .events = POLLIN
+      };
+      poll(&pfd, 1, 5000);
+    }
+    return r;
+  } else {
+    return 0;
+  }
 }
 
 ssize_t IRC::SendMsg(std::string_view msg) const {
@@ -144,6 +150,70 @@ std::ostream& operator<<(std::ostream& o, const IRC& i) {
   return o << "Service: " << i.StateToString(i.service_type) << " (SSL: "
            << "false"
            << ")";
+}
+
+// Message Types
+
+namespace {
+
+constexpr uint64_t GetCommandMaskAsUint(std::string_view command) {
+  const char* p = command.data();
+  uint64_t mask = 0;
+  if (command.size() <= 8) {
+    for (size_t i = 0; i < command.size(); i++) {
+      mask |= static_cast<uint64_t>(static_cast<unsigned char>(*p++) & 0xff)
+              << (i * 8);
+    }
+  }
+  return mask;
+}
+
+}  // namespace
+
+IRCMessageType GetSetIRCMessageType(IRCMessage& m) {
+  switch (GetCommandMaskAsUint(m.GetCommand())) {
+    case GetCommandMaskAsUint("PING"):
+      return m.message_type = IRCMessageType::PING;
+    case GetCommandMaskAsUint("LOGIN"):
+      return m.message_type = IRCMessageType::LOGIN;
+    case GetCommandMaskAsUint("NICK"):
+      return m.message_type = IRCMessageType::NICK;
+    case GetCommandMaskAsUint("JOIN"):
+      return m.message_type = IRCMessageType::JOIN;
+    case GetCommandMaskAsUint("PART"):
+      return m.message_type = IRCMessageType::PART;
+    case GetCommandMaskAsUint("PRIVMSG"):
+      return m.message_type = IRCMessageType::PRIVMSG;
+    default:
+      return m.message_type = IRCMessageType::_DEFAULT;
+  }
+}
+
+IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage&& m) {
+  IRCMessageVariant mv;
+  switch (GetSetIRCMessageType(m)) {
+    case IRCMessageType::PING:
+      mv.emplace<IRCMessagePing>(std::move(m));
+      return mv;
+    /*
+    case IRCMessageType::LOGIN:
+    case IRCMessageType::NICK:
+    case IRCMessageType::JOIN:
+    case IRCMessageType::PART:
+    */
+    case IRCMessageType::PRIVMSG:
+      if (!Message::IsQuitMessage(m)) {
+        mv.emplace<IRCMessagePrivMsg>(std::move(m));
+        return mv;
+      }
+      [[fallthrough]];
+    case IRCMessageType::QUIT:
+      mv.emplace<IRCMessageQuit>();
+      return mv;
+    default:
+      mv.emplace<IRCMessage>(std::move(m));
+      return mv;
+  }
 }
 
 }  // namespace kbot

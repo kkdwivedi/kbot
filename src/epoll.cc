@@ -22,7 +22,7 @@ EpollManager::EpollManager(EpollManager &&m) {
 }
 
 EpollManager &EpollManager::operator=(EpollManager &&m) {
-  close(fd);
+  if (fd >= 0) close(fd);
   fd = m.fd;
   m.fd = -1;
 
@@ -36,6 +36,9 @@ EpollManager::~EpollManager() {
     if (ctx.type == EpollStaticEvent::Type::Exit) {
       ctx.cb(ctx);
     }
+  }
+  if (fd >= 0) {
+    close(fd);
   }
 }
 

@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace kbot {
@@ -37,11 +38,14 @@ class IRC {
   const enum IRCService service_type = IRCService::kAtheme;
 
  public:
-  const int fd = -1;
-  explicit IRC(const int sockfd);
+  int fd = -1;
+  explicit IRC(int sockfd);
   IRC(const IRC&) = delete;
   IRC& operator=(IRC&) = delete;
-  IRC(IRC&&) = delete;
+  IRC(IRC&& i) {
+    fd = i.fd;
+    i.fd = -1;
+  }
   IRC& operator=(IRC&&) = delete;
   virtual ~IRC();
   // Static Methods
@@ -74,11 +78,13 @@ struct IRCUser {
 
 enum class IRCMessageType : uint8_t {
   _DEFAULT,
+  PING,
   LOGIN,
   NICK,
   JOIN,
   PART,
   PRIVMSG,
+  QUIT,
 };
 
 class IRCMessage {
@@ -173,7 +179,7 @@ class IRCMessage {
 
   std::string_view GetTags() const { return tags; }
 
-  const std::vector<std::pair<std::string_view, std::string_view>>& get_tag_kv()
+  const std::vector<std::pair<std::string_view, std::string_view>>& GetTagKV()
       const {
     return tag_kv;
   }
@@ -197,11 +203,15 @@ class IRCMessage {
 
 // Message Types
 
-class IRCMessagePrivmsg : public IRCMessage {
+class IRCMessagePing : public IRCMessage {
  public:
-  IRCMessagePrivmsg(std::string_view l)
-      : IRCMessage(std::move(l), IRCMessageType::PRIVMSG) {}
-  IRCMessagePrivmsg(IRCMessage&& m) : IRCMessage(std::move(m)) {}
+  IRCMessagePing(IRCMessage&& m) : IRCMessage(std::move(m)) {}
+  std::string_view GetPongParameter() const { return param_vec.at(0); }
+};
+
+class IRCMessagePrivMsg : public IRCMessage {
+ public:
+  IRCMessagePrivMsg(IRCMessage&& m) : IRCMessage(std::move(m)) {}
   IRCUser GetUser() const {
     IRCUser u = {};
     size_t src_size = source.size();
@@ -224,6 +234,8 @@ class IRCMessagePrivmsg : public IRCMessage {
   }
   std::string_view GetChannel() const { return param_vec.at(0); }
 };
+
+struct IRCMessageQuit {};
 
 // Predicate functions
 
@@ -253,9 +265,14 @@ inline bool IsQuitMessage(const IRCMessage& m) {
   auto& params = m.GetParameters();
   if (params.size() > 1 && !(params.at(1) == ":,quit")) return false;
   if (m.message_type != IRCMessageType::PRIVMSG) return false;
-  if (!IsUserCapable(static_cast<const IRCMessagePrivmsg&>(m).GetUser(), kQuit))
+  if (!IsUserCapable(static_cast<const IRCMessagePrivMsg&>(m).GetUser(), kQuit))
     return false;
   return true;
+}
+
+inline bool IsPingMessage(const IRCMessage& m) {
+  if (m.GetCommand() == "PING") return true;
+  return false;
 }
 
 inline bool IsPrivMsgMessage(const IRCMessage& m) {
@@ -265,5 +282,12 @@ inline bool IsPrivMsgMessage(const IRCMessage& m) {
 }
 
 }  // namespace Message
+
+using IRCMessageVariant =
+    std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessagePrivMsg,
+                 IRCMessageQuit>;
+
+IRCMessageType GetSetIRCMessageType(IRCMessage& m);
+IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage&& m);
 
 }  // namespace kbot

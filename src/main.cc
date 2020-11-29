@@ -76,29 +76,28 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  auto ptr = kbot::connection_new(address, port, nickname);
-  if (ptr == nullptr) {
+  auto server_opt = kbot::ConnectionNew(address, port, nickname);
+  if (server_opt.has_value() == false) {
     LOG(INFO) << "Failed to establish connection to server";
     usage();
+    return 1;
   }
-
   auto root = kbot::LaunchServerThread(
-      [](std::shared_ptr<kbot::Server> ptr) {
-        auto m = kbot::Manager::CreateNew(ptr->get_address());
-        kbot::worker_run(std::move(m), ptr);
+      [nickname, channel](kbot::Server &&server) {
+        auto m = kbot::Manager::CreateNew(std::move(server));
+        auto r = m.server.Login(nickname);
+        if (r < 0) {
+          PLOG(ERROR) << "Login failed";
+          return;
+        }
+        m.server.JoinChannel(channel);
+        m.server.SendChannel(channel, "Hello!");
+        m.server.DumpInfo();
+        kbot::WorkerRun(std::move(m));
       },
-      ptr);
+      std::move(server_opt.value()));
 
-  auto r = ptr->Login(nickname);
-  if (r < 0) {
-    LOG(INFO) << "LOGIN failed";
-    return 0;
-  }
-  auto id = ptr->join_channel(channel);
-  ptr->send_channel(id, "Hello World!");
-  ptr->dump_info();
   root.join();
   LOG(INFO) << "Shutting down";
-
   return 0;
 }

@@ -4,6 +4,7 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+#include <sys/timerfd.h>
 
 #include <atomic>
 #include <cassert>
@@ -13,6 +14,8 @@
 #include <server.hh>
 #include <thread>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace kbot {
@@ -27,32 +30,48 @@ class Manager {
   sigset_t cur_set;
   std::unordered_map<int, std::function<void(struct signalfd_siginfo&)>>
       signalfd_sig_map;
+  std::unordered_map<int, std::function<void(int)>> timerfd_set;
+
   static inline std::atomic<int> sigId = SIGRTMIN;
 
-  explicit Manager(io::EpollManager&& epm, int curSigId) : epm(std::move(epm)) {
+  explicit Manager(io::EpollManager&& epm, Server&& server, int curSigId)
+      : epm(std::move(epm)), server(std::move(server)) {
     sigemptyset(&cur_set);
     sigaddset(&cur_set, curSigId);
   }
   bool InitializeSignalFd();
 
  public:
+  Server server;
+
   Manager(const Manager&) = delete;
   Manager& operator=(const Manager&) = delete;
-  Manager(Manager&& m) : epm(std::move(m.epm)) {
+  Manager(Manager&& m) : epm(std::move(m.epm)), server(std::move(m.server)) {
     sigfd = m.sigfd;
     m.sigfd = -1;
   }
   Manager& operator=(Manager&&) = delete;
   ~Manager() {
-    epm.DeleteFd(sigfd);
-    close(sigfd);
+    if (sigfd >= 0) {
+      epm.DeleteFd(sigfd);
+      close(sigfd);
+    }
     sigId.fetch_sub(1, std::memory_order_relaxed);
   }
 
-  static Manager CreateNew(std::string_view server_name);
+  static Manager CreateNew(Server&& server);
+  // Signal Events
   bool RegisterSignalEvent(
       int signal, std::function<void(struct signalfd_siginfo&)> handler);
   bool DeleteSignalEvent(int signal);
+  // Timer Events
+  int RegisterTimerEvent(int clockid, std::function<void(int)> handler);
+  bool RearmTimerEvent(int timerfd);
+  bool DisarmTimerEvent(int timerfd);
+  bool DeleteTimerEvent(int timerfd);
+  // Generic
+  bool RegisterChildEvent(int pidfd);
+
   void RunEventLoop();
 };
 
@@ -73,15 +92,15 @@ LaunchServerThread(Callable&& thread_main, Args&&... args) {
   return worker;
 }
 
-void worker_run(Manager m, std::shared_ptr<Server> ptr);
+void WorkerRun(Manager m);
 
-using callback_t = void (*)(const Server& s, const IRCMessage& m);
+using callback_t = void (*)(Server& s, const IRCMessage& m);
 
 extern std::recursive_mutex privmsg_callback_map_mtx;
 
 bool add_privmsg_callback(std::string_view command, callback_t cb_ptr);
 auto get_privmsg_callback(std::string_view command)
-    -> void (*)(const Server&, const IRCMessagePrivmsg&);
+    -> void (*)(Server&, const IRCMessagePrivMsg&);
 callback_t get_callback(std::string_view command);
 bool del_privmsg_callback(std::string_view command);
 
