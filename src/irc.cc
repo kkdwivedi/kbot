@@ -185,11 +185,15 @@ IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m) {
       return mv;
     /*
     case IRCMessageType::LOGIN:
-    case IRCMessageType::NICK:
     case IRCMessageType::JOIN:
     case IRCMessageType::PART:
     */
+    case IRCMessageType::NICK:
+      assert(Message::IsUserMessage(m.GetSource()));
+      mv.emplace<IRCMessageNick>(std::move(m));
+      return mv;
     case IRCMessageType::PRIVMSG:
+      assert(!Message::IsServerMessage(m.GetSource()));
       if (!Message::IsQuitMessage(m)) {
         mv.emplace<IRCMessagePrivMsg>(std::move(m));
         return mv;

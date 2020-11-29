@@ -290,8 +290,8 @@ inline IRCUser ParseSourceUser(std::string_view source) {
 
 }  // namespace Message
 
-using IRCMessageVariant =
-    std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessagePrivMsg, IRCMessageQuit>;
+using IRCMessageVariant = std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessageNick,
+                                       IRCMessagePrivMsg, IRCMessageQuit>;
 
 IRCMessageType GetSetIRCMessageType(IRCMessage &m);
 IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m);

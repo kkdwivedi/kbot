@@ -80,9 +80,13 @@ class Server : public IRC {
     std::unique_lock lock(nick_mtx);
     return nickname;
   }
-  void UpdateNickname(std::string_view nickname_) {
+  void UpdateNickname(std::string_view old_nick, std::string_view new_nick) {
     std::unique_lock lock(nick_mtx);
-    nickname = nickname_;
+    if (old_nick == nickname) {
+      nickname = new_nick;
+    } else {
+      LOG(ERROR) << "Old nickname doesn't match current nickname, no update made";
+    }
   }
   void SetNickname(std::string_view nickname_) {
     auto r = IRC::Nick(nickname_.data());
