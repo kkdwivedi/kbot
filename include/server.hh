@@ -85,11 +85,7 @@ class Server : public IRC {
     nickname = nickname_;
   }
   void SetNickname(std::string_view nickname_) {
-    ssize_t r;
-    {
-      std::unique_lock lock(nick_mtx);
-      r = IRC::Nick(nickname_.data());
-    }
+    auto r = IRC::Nick(nickname_.data());
     if (r < 0) {
       LOG(ERROR) << "Failed to initiate change to nickname: " << nickname_;
       return;
