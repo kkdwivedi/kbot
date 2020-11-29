@@ -132,16 +132,23 @@ void cb_pong(Server &s, const IRCMessage &m) {
   s.SendMsg("PONG :" + std::string(m.GetParameters()[0].substr(1, std::string::npos)));
 }
 
-void cb_nickname(Server &s, const IRCMessagePrivMsg &m) {
-  std::string_view new_nick = m.GetParameters()[0].substr(1);
-  auto u = static_cast<const IRCMessagePrivMsg &>(m).GetUser();
-  LOG(INFO) << "Nickname change received: " << u.nickname << " -> " << new_nick;
-  s.SetNickname(new_nick);
+void cb_nickname(Server &s, const IRCMessageNick &m) {
+  std::string_view new_nick = m.GetNewNickname();
+  LOG(INFO) << "Nickname change received, applying " << new_nick;
+  s.UpdateNickname(m.GetUser().nickname, new_nick);
 }
 
 void cb_privmsg_hello(Server &s, const IRCMessagePrivMsg &m) {
-  if (m.GetParameters()[0] == "##kbot")
-    s.PrivMsg("##kbot", std::string(m.GetUser().nickname) += ": Hey buddy!");
+  if (m.GetChannel() == "##kbot") {
+    s.PrivMsg(m.GetChannel(), std::string(m.GetUser().nickname).append(": Hello!"));
+  }
+}
+
+void cb_privmsg_nick(Server &s, const IRCMessagePrivMsg &m) {
+  auto u = m.GetUser();
+  if (Message::IsUserCapable(u, IRCUserCapability::kNickModify)) {
+    s.SetNickname(m.GetParameters().at(IRCMessagePrivMsg::FirstParamForUserCommand));
+  }
 }
 
 void cb_privmsg(Server &s, const IRCMessagePrivMsg &m) {
@@ -154,6 +161,7 @@ void cb_privmsg(Server &s, const IRCMessagePrivMsg &m) {
 std::unordered_map<std::string_view, void (*)(Server &, const IRCMessagePrivMsg &)>
     privmsg_callback_map = {
         {":,quit", nullptr},
+        {":,nick", &cb_privmsg_nick},
         {":,hi", &cb_privmsg_hello},
 };
 
@@ -186,6 +194,7 @@ constexpr auto IRCMessageVisitor =
     OverloadSet{[](Server &s, const std::monostate &) { LOG(ERROR) << "Unimplemented"; },
                 [](Server &s, const IRCMessage &m) { LOG(INFO) << m; },
                 [](Server &s, const IRCMessagePing &m) { cb_pong(s, m); },
+                [](Server &s, const IRCMessageNick &m) { cb_nickname(s, m); },
                 [](Server &s, const IRCMessagePrivMsg &m) { cb_privmsg(s, m); },
                 [](Server &s, const IRCMessageQuit &m) { __builtin_unreachable(); }};
 

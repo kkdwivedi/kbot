@@ -18,6 +18,7 @@ enum IRCUserCapability : uint64_t {
   kQuit = (1ULL << 0),
   kPart = (1ULL << 1),
   kJoin = (1ULL << 2),
+  kNickModify = (1ULL << 3),
   kMax = UINT64_MAX,
 };
 
@@ -70,7 +71,6 @@ struct IRCUser {
   std::string_view nickname;
   std::string_view hostname;
   std::string_view username;
-  std::string_view channel;
 };
 
 // Destructured raw IRC message
@@ -194,6 +194,12 @@ class IRCMessage {
   }
 };
 
+namespace Message {
+
+IRCUser ParseSourceUser(std::string_view source);
+
+}
+
 // Message Types
 
 class IRCMessagePing : public IRCMessage {
@@ -202,29 +208,18 @@ class IRCMessagePing : public IRCMessage {
   std::string_view GetPongParameter() const { return param_vec.at(0); }
 };
 
+class IRCMessageNick : public IRCMessage {
+ public:
+  IRCMessageNick(IRCMessage &&m) : IRCMessage(std::move(m)) {}
+  std::string_view GetNewNickname() const { return param_vec.at(0).substr(1); }
+  IRCUser GetUser() const { return Message::ParseSourceUser(source); }
+};
+
 class IRCMessagePrivMsg : public IRCMessage {
  public:
+  static inline constexpr size_t FirstParamForUserCommand = 2;
   IRCMessagePrivMsg(IRCMessage &&m) : IRCMessage(std::move(m)) {}
-  IRCUser GetUser() const {
-    IRCUser u = {};
-    size_t src_size = source.size();
-    size_t cur = 0;
-    size_t next = std::min(source.find('!', cur), src_size);
-    assert(cur <= next);
-    u.nickname = std::string_view(&source[cur], &source[next]);
-    if (next == src_size) return u;
-    cur = next + 1;
-    next = std::min(source.find('@', next), src_size);
-    assert(cur <= next);
-    u.username = std::string_view(&source[cur], &source[next]);
-    if (next == src_size) return u;
-    cur = next + 1;
-    next = src_size;
-    assert(cur <= next);
-    u.hostname = std::string_view(&source[cur], &source[next]);
-    u.channel = std::string_view(param_vec.at(0));
-    return u;
-  }
+  IRCUser GetUser() const { return Message::ParseSourceUser(source); }
   std::string_view GetChannel() const { return param_vec.at(0); }
 };
 
@@ -268,6 +263,29 @@ inline bool IsPrivMsgMessage(const IRCMessage &m) {
   if (IsServerMessage(m.GetSource())) return false;
   if (m.GetCommand() != "PRIVMSG") return false;
   return true;
+}
+
+inline IRCUser ParseSourceUser(std::string_view source) {
+  if (!Message::IsUserMessage(source)) {
+    throw std::runtime_error("Source parameter is not a valid IRCUser specification");
+  }
+  IRCUser u = {};
+  size_t src_size = source.size();
+  size_t cur = 0;
+  size_t next = std::min(source.find('!', cur), src_size);
+  assert(cur <= next);
+  u.nickname = std::string_view(&source[cur], &source[next]);
+  if (next == src_size) return u;
+  cur = next + 1;
+  next = std::min(source.find('@', next), src_size);
+  assert(cur <= next);
+  u.username = std::string_view(&source[cur], &source[next]);
+  if (next == src_size) return u;
+  cur = next + 1;
+  next = src_size;
+  assert(cur <= next);
+  u.hostname = std::string_view(&source[cur], &source[next]);
+  return u;
 }
 
 }  // namespace Message
