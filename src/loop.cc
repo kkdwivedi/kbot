@@ -23,14 +23,13 @@ namespace kbot {
 
 // Manager
 
-Manager Manager::CreateNew(Server&& server) {
+Manager Manager::CreateNew(Server &&server) {
   auto epm = io::EpollManager::CreateNew();
   if (epm.has_value()) {
     auto curSigId = sigId.fetch_add(1, std::memory_order_relaxed);
     if (curSigId > SIGRTMAX) {
       sigId.fetch_sub(1, std::memory_order_relaxed);
-      throw std::runtime_error(
-          "No more Manager instances can be created, signal ID exhausted.");
+      throw std::runtime_error("No more Manager instances can be created, signal ID exhausted.");
     }
 
     sigset_t set;
@@ -90,8 +89,8 @@ bool Manager::InitializeSignalFd() {
   }
 }
 
-bool Manager::RegisterSignalEvent(
-    int signal, std::function<void(struct signalfd_siginfo&)> handler) {
+bool Manager::RegisterSignalEvent(int signal,
+                                  std::function<void(struct signalfd_siginfo &)> handler) {
   if (sigfd == -1) {
     sigaddset(&cur_set, signal);
     if (InitializeSignalFd()) {
@@ -128,33 +127,31 @@ bool Manager::DeleteSignalEvent(int signal) {
 
 namespace {
 
-void cb_pong(Server& s, const IRCMessage& m) {
+void cb_pong(Server &s, const IRCMessage &m) {
   LOG(INFO) << "Received PING, replying with PONG to " << m.GetParameters()[0];
-  s.SendMsg("PONG :" +
-            std::string(m.GetParameters()[0].substr(1, std::string::npos)));
+  s.SendMsg("PONG :" + std::string(m.GetParameters()[0].substr(1, std::string::npos)));
 }
 
-void cb_nickname(Server& s, const IRCMessagePrivMsg& m) {
+void cb_nickname(Server &s, const IRCMessagePrivMsg &m) {
   std::string_view new_nick = m.GetParameters()[0].substr(1);
-  auto u = static_cast<const IRCMessagePrivMsg&>(m).GetUser();
+  auto u = static_cast<const IRCMessagePrivMsg &>(m).GetUser();
   LOG(INFO) << "Nickname change received: " << u.nickname << " -> " << new_nick;
   s.SetNickname(new_nick);
 }
 
-void cb_privmsg_hello(Server& s, const IRCMessagePrivMsg& m) {
+void cb_privmsg_hello(Server &s, const IRCMessagePrivMsg &m) {
   if (m.GetParameters()[0] == "##kbot")
     s.PrivMsg("##kbot", std::string(m.GetUser().nickname) += ": Hey buddy!");
 }
 
-void cb_privmsg(Server& s, const IRCMessagePrivMsg& m) {
+void cb_privmsg(Server &s, const IRCMessagePrivMsg &m) {
   std::unique_lock lock(privmsg_callback_map_mtx);
   auto cb = get_privmsg_callback(m.GetParameters()[1]);
   if (cb != nullptr) cb(s, m);
 }
 
 // Map for bot commands
-std::unordered_map<std::string_view,
-                   void (*)(Server&, const IRCMessagePrivMsg&)>
+std::unordered_map<std::string_view, void (*)(Server &, const IRCMessagePrivMsg &)>
     privmsg_callback_map = {
         {":,quit", nullptr},
         {":,hi", &cb_privmsg_hello},
@@ -166,7 +163,7 @@ std::unordered_map<std::string_view,
 std::recursive_mutex privmsg_callback_map_mtx;
 
 auto get_privmsg_callback(std::string_view command)
-    -> void (*)(Server&, const IRCMessagePrivMsg&) {
+    -> void (*)(Server &, const IRCMessagePrivMsg &) {
   std::lock_guard<std::recursive_mutex> lock(privmsg_callback_map_mtx);
   auto it = privmsg_callback_map.find(command);
   return it == privmsg_callback_map.end() ? nullptr : it->second;
@@ -185,27 +182,27 @@ struct OverloadSet : T... {
 template <class... T>
 OverloadSet(T...) -> OverloadSet<T...>;
 
-constexpr auto IRCMessageVisitor = OverloadSet{
-    [](Server& s, const std::monostate&) { LOG(ERROR) << "Unimplemented"; },
-    [](Server& s, const IRCMessage& m) { LOG(INFO) << m; },
-    [](Server& s, const IRCMessagePing& m) { cb_pong(s, m); },
-    [](Server& s, const IRCMessagePrivMsg& m) { cb_privmsg(s, m); },
-    [](Server& s, const IRCMessageQuit& m) { __builtin_unreachable(); }};
+constexpr auto IRCMessageVisitor =
+    OverloadSet{[](Server &s, const std::monostate &) { LOG(ERROR) << "Unimplemented"; },
+                [](Server &s, const IRCMessage &m) { LOG(INFO) << m; },
+                [](Server &s, const IRCMessagePing &m) { cb_pong(s, m); },
+                [](Server &s, const IRCMessagePrivMsg &m) { cb_privmsg(s, m); },
+                [](Server &s, const IRCMessageQuit &m) { __builtin_unreachable(); }};
 
 using VisitorBase = decltype(IRCMessageVisitor);
 
 struct Visitor : VisitorBase {
-  Server& s;
-  explicit Visitor(Server& s) : s(s) {}
+  Server &s;
+  explicit Visitor(Server &s) : s(s) {}
   using VisitorBase::operator();
-  void operator()(const auto& m) { VisitorBase::operator()(s, m); }
+  void operator()(const auto &m) { VisitorBase::operator()(s, m); }
 };
 
-std::vector<std::string_view> TokenizeMessageMultiple(std::string& msg) {
+std::vector<std::string_view> TokenizeMessageMultiple(std::string &msg) {
   std::vector<std::string_view> ret;
-  char* p = msg.data();
-  const char* delim = "\r\n";
-  char* saveptr;
+  char *p = msg.data();
+  const char *delim = "\r\n";
+  char *saveptr;
   while ((p = strtok_r(p, delim, &saveptr))) {
     ret.emplace_back(p);
     p = nullptr;
@@ -213,14 +210,14 @@ std::vector<std::string_view> TokenizeMessageMultiple(std::string& msg) {
   return ret;
 }
 
-bool ProcessMessageLine(Server& s, std::string_view line) try {
+bool ProcessMessageLine(Server &s, std::string_view line) try {
   auto mv = GetIRCMessageVariantFrom(IRCMessage(line));
   // Handle termination early
   if (std::holds_alternative<IRCMessageQuit>(mv)) return false;
   std::unique_lock lock(privmsg_callback_map_mtx);
   std::visit(Visitor{s}, mv);
   return true;
-} catch (std::runtime_error& e) {
+} catch (std::runtime_error &e) {
   LOG(INFO) << "Caught IRCMessage exception: (" << e.what() << ")";
   return false;
 }
@@ -236,7 +233,7 @@ void WorkerRun(Manager m) {
           std::string msg(mm.server.RecvMsg());
           if (msg == "") return;
           std::vector<std::string_view> tok = TokenizeMessageMultiple(msg);
-          for (auto& line : tok) {
+          for (auto &line : tok) {
             r = ProcessMessageLine(mm.server, line);
           }
         },

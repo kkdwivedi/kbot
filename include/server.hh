@@ -36,14 +36,14 @@ enum class ChannelState {
 constexpr int ServerStateMax = static_cast<int>(ServerState::kMax);
 constexpr int ChannelStateMax = static_cast<int>(ChannelState::kMax);
 
-constexpr const char* const ServerStateStringTable[ServerStateMax] = {
+constexpr const char *const ServerStateStringTable[ServerStateMax] = {
     "Disconnected",
     "Logged In",
     "Connected",
     "Failed",
 };
 
-constexpr const char* const ChannelStateStringTable[ChannelStateMax] = {
+constexpr const char *const ChannelStateStringTable[ChannelStateMax] = {
     "Member", "Voiced", "HalfOperator", "Operator", "Owner", "Invalid",
 };
 
@@ -59,19 +59,15 @@ class Server : public IRC {
   std::string nickname;
 
  public:
-  explicit Server(int sockfd, std::string address, uint16_t port,
-                  const char* nickname)
-      : IRC(sockfd),
-        address(std::move(address)),
-        port(port),
-        nickname(nickname) {}
-  Server(const Server&) = delete;
-  Server& operator=(const Server&) = delete;
-  Server(Server&&);
-  Server& operator=(Server&&) = delete;
+  explicit Server(int sockfd, std::string address, uint16_t port, const char *nickname)
+      : IRC(sockfd), address(std::move(address)), port(port), nickname(nickname) {}
+  Server(const Server &) = delete;
+  Server &operator=(const Server &) = delete;
+  Server(Server &&);
+  Server &operator=(Server &&) = delete;
   ~Server() { IRC::Quit("Goodbye cruel world!"); }
   // Static Methods
-  static constexpr const char* StateToString(const enum ServerState state) {
+  static constexpr const char *StateToString(const enum ServerState state) {
     return ServerStateStringTable[static_cast<int>(state)];
   }
   // Basic API
@@ -80,7 +76,7 @@ class Server : public IRC {
   void SetState(const ServerState state);
   std::string GetAddress() { return address; }
   uint16_t GetPort() const { return port; }
-  const std::string& GetNickname() {
+  const std::string &GetNickname() {
     std::unique_lock lock(nick_mtx);
     return nickname;
   }
@@ -110,13 +106,13 @@ class Server : public IRC {
 
 struct Channel {
   Channel() = default;
-  Channel(const Channel&) = delete;
-  Channel& operator=(const Channel&) = delete;
-  Channel(Channel&&) = delete;
-  Channel& operator=(Channel&&) = delete;
+  Channel(const Channel &) = delete;
+  Channel &operator=(const Channel &) = delete;
+  Channel(Channel &&) = delete;
+  Channel &operator=(Channel &&) = delete;
   ~Channel() = default;
 };
 
-std::optional<Server> ConnectionNew(std::string, uint16_t, const char*);
+std::optional<Server> ConnectionNew(std::string, uint16_t, const char *);
 
 }  // namespace kbot

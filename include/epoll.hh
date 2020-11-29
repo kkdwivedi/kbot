@@ -16,13 +16,12 @@ struct EpollStaticEvent {
     Post = 1,
     Exit = 2,
   } type;
-  explicit EpollStaticEvent(Type type,
-                            std::function<void(EpollStaticEvent& self)> cb)
+  explicit EpollStaticEvent(Type type, std::function<void(EpollStaticEvent &self)> cb)
       : type(type), cb(std::move(cb)) {}
   void PreEnable() { type = Type::Pre; }
   void PostEnable() { type = Type::Post; }
   void ExitEnable() { type = Type::Exit; }
-  std::function<void(EpollStaticEvent& self)> cb;
+  std::function<void(EpollStaticEvent &self)> cb;
 };
 
 struct EpollContext {
@@ -76,24 +75,22 @@ class EpollManager {
     EpollConfigFullMask = EPOLLET | EPOLLONESHOT | EPOLLWAKEUP | EPOLLEXCLUSIVE,
   };
 
-  EpollManager(const EpollManager&) = delete;
-  EpollManager& operator=(const EpollManager&) = delete;
-  EpollManager(EpollManager&&);
-  EpollManager& operator=(EpollManager&&);
+  EpollManager(const EpollManager &) = delete;
+  EpollManager &operator=(const EpollManager &) = delete;
+  EpollManager(EpollManager &&);
+  EpollManager &operator=(EpollManager &&);
   ~EpollManager();
 
   static std::optional<EpollManager> CreateNew();
   void RegisterStaticEvent(EpollStaticEvent::Type type,
-                           std::function<void(EpollStaticEvent& self)> cb);
-  bool RegisterFd(int fd, EventFlags events,
-                  std::function<void(struct epoll_event)> callback,
+                           std::function<void(EpollStaticEvent &self)> cb);
+  bool RegisterFd(int fd, EventFlags events, std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
   bool EnableFd(int fd);
   bool DisableFd(int fd);
   bool ModifyFdEvents(int fd, EventFlags events);
   bool ModifyFdConfig(int fd, ConfigFlags configs);
-  bool ModifyFdCallback(int fd,
-                        std::function<void(struct epoll_event)> callback);
+  bool ModifyFdCallback(int fd, std::function<void(struct epoll_event)> callback);
   bool DeleteFd(int fd);
   int RunEventLoop(int timeout);
 };

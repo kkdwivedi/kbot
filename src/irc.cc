@@ -16,9 +16,7 @@
 
 namespace kbot {
 
-IRC::IRC(int sockfd) : fd(sockfd) {
-  DLOG(INFO) << "Constructing IRC Backend: " << *this;
-}
+IRC::IRC(int sockfd) : fd(sockfd) { DLOG(INFO) << "Constructing IRC Backend: " << *this; }
 
 IRC::~IRC() {
   if (fd >= 0) {
@@ -27,18 +25,14 @@ IRC::~IRC() {
   }
 }
 
-constexpr const char* IRC::StateToString(enum IRCService s) {
+constexpr const char *IRC::StateToString(enum IRCService s) {
   return IRCServiceStringTable[static_cast<int>(s)];
 }
 
 ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
   ssize_t fail = 0;
   std::string buf;
-  buf.append("\rUSER ")
-      .append(nickname)
-      .append(" 0 * :")
-      .append(nickname)
-      .append("\r\n");
+  buf.append("\rUSER ").append(nickname).append(" 0 * :").append(nickname).append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) {
     PLOG(ERROR) << "Failed to send USER LOGIN message";
@@ -83,11 +77,7 @@ ssize_t IRC::Part(std::string_view channel) const {
 
 ssize_t IRC::PrivMsg(std::string_view recipient, std::string_view msg) const {
   std::string buf;
-  buf.append("\rPRIVMSG ")
-      .append(recipient)
-      .append(" :")
-      .append(msg)
-      .append("\r\n");
+  buf.append("\rPRIVMSG ").append(recipient).append(" :").append(msg).append("\r\n");
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send PRIVMSG message";
   return r;
@@ -128,8 +118,7 @@ std::string IRC::RecvMsg() const {
     buf.resize(r + 4096);
     ssize_t p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL | MSG_DONTWAIT);
     if (p <= 0) {
-      if (errno != EAGAIN)
-        PLOG(ERROR) << "Failed to receive data: " << strerror(errno);
+      if (errno != EAGAIN) PLOG(ERROR) << "Failed to receive data: " << strerror(errno);
       if (r)
         break;
       else
@@ -146,7 +135,7 @@ std::string IRC::RecvMsg() const {
   return buf;
 }
 
-std::ostream& operator<<(std::ostream& o, const IRC& i) {
+std::ostream &operator<<(std::ostream &o, const IRC &i) {
   return o << "Service: " << i.StateToString(i.service_type) << " (SSL: "
            << "false"
            << ")";
@@ -157,12 +146,11 @@ std::ostream& operator<<(std::ostream& o, const IRC& i) {
 namespace {
 
 constexpr uint64_t GetCommandMaskAsUint(std::string_view command) {
-  const char* p = command.data();
+  const char *p = command.data();
   uint64_t mask = 0;
   if (command.size() <= 8) {
     for (size_t i = 0; i < command.size(); i++) {
-      mask |= static_cast<uint64_t>(static_cast<unsigned char>(*p++) & 0xff)
-              << (i * 8);
+      mask |= static_cast<uint64_t>(static_cast<unsigned char>(*p++) & 0xff) << (i * 8);
     }
   }
   return mask;
@@ -170,7 +158,7 @@ constexpr uint64_t GetCommandMaskAsUint(std::string_view command) {
 
 }  // namespace
 
-IRCMessageType GetSetIRCMessageType(IRCMessage& m) {
+IRCMessageType GetSetIRCMessageType(IRCMessage &m) {
   switch (GetCommandMaskAsUint(m.GetCommand())) {
     case GetCommandMaskAsUint("PING"):
       return m.message_type = IRCMessageType::PING;
@@ -189,7 +177,7 @@ IRCMessageType GetSetIRCMessageType(IRCMessage& m) {
   }
 }
 
-IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage&& m) {
+IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m) {
   IRCMessageVariant mv;
   switch (GetSetIRCMessageType(m)) {
     case IRCMessageType::PING:

@@ -16,8 +16,7 @@
   LOG(INFO) << "              -x <password> -l (ssl)";
   LOG(INFO) << "Example: kbot chat.freenode.net 6667 ##kbot kbot";
   LOG(INFO) << "         kbot -s chat.freenode.net -n kbot -p 6667 -c ##kbot";
-  LOG(INFO) << "Version " << KBOT_VERSION << " (" << __DATE__ << ", "
-            << __TIME__ << ")";
+  LOG(INFO) << "Version " << KBOT_VERSION << " (" << __DATE__ << ", " << __TIME__ << ")";
   exit(0);
 }
 

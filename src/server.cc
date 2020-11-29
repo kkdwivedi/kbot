@@ -24,13 +24,12 @@ namespace kbot {
 
 // Move support is only for initial setup (and move into Manager instance)
 // Do not call in multithreaded context, things WILL break, no mutex are held
-Server::Server(Server&& s)
-    : IRC(static_cast<IRC&&>(s)),
+Server::Server(Server &&s)
+    : IRC(static_cast<IRC &&>(s)),
       address(std::move(s.address)),
       chan_map(std::move(s.chan_map)),
       nickname(std::move(s.nickname)) {
-  state.store(s.state.load(std::memory_order_relaxed),
-              std::memory_order_relaxed);
+  state.store(s.state.load(std::memory_order_relaxed), std::memory_order_relaxed);
   port = s.port;
 }
 
@@ -41,14 +40,14 @@ void Server::DumpInfo() {
     DLOG(INFO) << "Nickname: " << nickname;
   }
   std::shared_lock read_lock(chan_mtx);
-  for (auto& p : chan_map) {
+  for (auto &p : chan_map) {
     DLOG(INFO) << " Channel: " << p.first;
   }
 }
 
 void Server::SetState(const ServerState state_) {
-  LOG(INFO) << "State transition for server: " << StateToString(state_)
-            << " -> " << StateToString(state_);
+  LOG(INFO) << "State transition for server: " << StateToString(state_) << " -> "
+            << StateToString(state_);
   state.store(state_, std::memory_order_relaxed);
 }
 
@@ -76,8 +75,7 @@ bool Server::SendChannel(std::string_view channel, std::string_view msg) {
   if (it != chan_map.end()) {
     return IRC::PrivMsg(channel, msg);
   } else {
-    LOG(ERROR) << "Failed to send message to channel: " << channel
-               << "; No such channel present";
+    LOG(ERROR) << "Failed to send message to channel: " << channel << "; No such channel present";
     return false;
   }
 }
@@ -94,14 +92,13 @@ void Server::PartChannel(std::string_view channel) {
     }
     chan_map.erase(chan_str);
   } else {
-    LOG(ERROR) << "Failed to part channel: " << channel
-               << "; No such channel present";
+    LOG(ERROR) << "Failed to part channel: " << channel << "; No such channel present";
   }
 }
 
 namespace {
 
-int GetConnectionFd(const char* addr, uint16_t port) {
+int GetConnectionFd(const char *addr, uint16_t port) {
   int fd = -1;
 
   struct addrinfo hints, *result;
@@ -116,7 +113,7 @@ int GetConnectionFd(const char* addr, uint16_t port) {
     return fd;
   }
 
-  struct addrinfo* i = result;
+  struct addrinfo *i = result;
   for (; i != nullptr; i = i->ai_next) {
     fd = socket(i->ai_family, i->ai_socktype | SOCK_CLOEXEC, i->ai_protocol);
     if (fd < 0) break;
@@ -129,12 +126,11 @@ int GetConnectionFd(const char* addr, uint16_t port) {
 
 }  // namespace
 
-std::optional<Server> ConnectionNew(std::string address, uint16_t port,
-                                    const char* nickname) {
+std::optional<Server> ConnectionNew(std::string address, uint16_t port, const char *nickname) {
   int fd = GetConnectionFd(address.c_str(), port);
   if (fd < 0) {
-    PLOG(ERROR) << "Failed to create server for " << address << "/" << port
-                << " (" << nickname << ')';
+    PLOG(ERROR) << "Failed to create server for " << address << "/" << port << " (" << nickname
+                << ')';
     return std::nullopt;
   }
   return Server{fd, address, port, nickname};

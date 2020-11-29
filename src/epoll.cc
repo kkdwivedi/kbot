@@ -50,8 +50,8 @@ std::optional<EpollManager> EpollManager::CreateNew() {
   return EpollManager{fd};
 }
 
-void EpollManager::RegisterStaticEvent(
-    EpollStaticEvent::Type type, std::function<void(EpollStaticEvent &)> cb) {
+void EpollManager::RegisterStaticEvent(EpollStaticEvent::Type type,
+                                       std::function<void(EpollStaticEvent &)> cb) {
   static_events.push_back(EpollStaticEvent{type, std::move(cb)});
 }
 
@@ -133,8 +133,7 @@ bool EpollManager::ModifyFdConfig(int fd, ConfigFlags config) {
     throw std::logic_error("Event flags must not be passed as config flags");
   }
   if ((uint32_t)config & EPOLLEXCLUSIVE) {
-    throw std::logic_error(
-        "EpollExclusive cannot be passed during a modify operation");
+    throw std::logic_error("EpollExclusive cannot be passed during a modify operation");
   }
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
@@ -152,8 +151,7 @@ bool EpollManager::ModifyFdConfig(int fd, ConfigFlags config) {
   return true;
 }
 
-bool EpollManager::ModifyFdCallback(
-    int fd, std::function<void(struct epoll_event)> callback) {
+bool EpollManager::ModifyFdCallback(int fd, std::function<void(struct epoll_event)> callback) {
   auto it = fd_map.find(fd);
   if (it == fd_map.end()) {
     errno = ENOENT;
@@ -188,8 +186,7 @@ int EpollManager::RunEventLoop(int timeout = 0) {
   events_vec.resize(fd_map.size());
 
   for (;;) {
-    int r = epoll_wait(fd, events_vec.data(),
-                       static_cast<int>(events_vec.size()), timeout);
+    int r = epoll_wait(fd, events_vec.data(), static_cast<int>(events_vec.size()), timeout);
     if (r < 0) {
       if (errno != EINTR) {
         return r;

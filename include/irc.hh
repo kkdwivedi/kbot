@@ -28,7 +28,7 @@ enum class IRCService {
 
 inline constexpr int IRCServiceMax = static_cast<int>(IRCService::kMax);
 
-inline constexpr const char* const IRCServiceStringTable[IRCServiceMax] = {
+inline constexpr const char *const IRCServiceStringTable[IRCServiceMax] = {
     "Atheme IRC Services",
 };
 
@@ -40,19 +40,18 @@ class IRC {
  public:
   int fd = -1;
   explicit IRC(int sockfd);
-  IRC(const IRC&) = delete;
-  IRC& operator=(IRC&) = delete;
-  IRC(IRC&& i) {
+  IRC(const IRC &) = delete;
+  IRC &operator=(IRC &) = delete;
+  IRC(IRC &&i) {
     fd = i.fd;
     i.fd = -1;
   }
-  IRC& operator=(IRC&&) = delete;
+  IRC &operator=(IRC &&) = delete;
   virtual ~IRC();
   // Static Methods
-  static constexpr const char* StateToString(const enum IRCService s);
+  static constexpr const char *StateToString(const enum IRCService s);
   // Command API
-  ssize_t Login(std::string_view nickname,
-                std::string_view password = "") const;
+  ssize_t Login(std::string_view nickname, std::string_view password = "") const;
   ssize_t Nick(std::string_view nickname) const;
   ssize_t Join(std::string_view channel) const;
   ssize_t Part(std::string_view channel) const;
@@ -62,7 +61,7 @@ class IRC {
   ssize_t SendMsg(std::string_view msg) const;
   std::string RecvMsg() const;
   // Friends/Misc
-  friend std::ostream& operator<<(std::ostream& o, const IRC& i);
+  friend std::ostream &operator<<(std::ostream &o, const IRC &i);
 };
 
 // User record for IRC messages not from the server
@@ -99,8 +98,7 @@ class IRCMessage {
  public:
   IRCMessageType message_type = IRCMessageType::_DEFAULT;
 
-  explicit IRCMessage(std::string_view l,
-                      IRCMessageType t = IRCMessageType::_DEFAULT) try
+  explicit IRCMessage(std::string_view l, IRCMessageType t = IRCMessageType::_DEFAULT) try
       : line(l), message_type(t) {
     size_t i = 0, prev = 0;
     if (line[i] == '@') {
@@ -115,8 +113,7 @@ class IRCMessage {
         std::string_view key(&tags[prev], &tags[i]), val;
         prev = i + 1;
         i = tags.find(';', prev);
-        val = std::string_view(&tags[prev],
-                               &tags[i == tags.npos ? tags.size() : i]);
+        val = std::string_view(&tags[prev], &tags[i == tags.npos ? tags.size() : i]);
         tag_kv.push_back({key, val});
         if (i == tags.npos)
           break;
@@ -152,19 +149,18 @@ class IRCMessage {
       prev = i + 1;
     }
     param_vec.push_back(std::string_view(&line[prev]));
-    if (param_vec.size() == 0 || param_vec[0] == "")
-      throw "Bad parameter present";
+    if (param_vec.size() == 0 || param_vec[0] == "") throw "Bad parameter present";
     line.shrink_to_fit();
     param_vec.shrink_to_fit();
     tag_kv.shrink_to_fit();
-  } catch (const char* e) {
+  } catch (const char *e) {
     DLOG(ERROR) << "Failure: " << e << " (" << l << ')';
     throw std::runtime_error("IRCMessage parsing error");
   }
 
-  IRCMessage(const IRCMessage&) = delete;
-  IRCMessage& operator=(IRCMessage&) = delete;
-  IRCMessage(IRCMessage&& m) {
+  IRCMessage(const IRCMessage &) = delete;
+  IRCMessage &operator=(IRCMessage &) = delete;
+  IRCMessage(IRCMessage &&m) {
     message_type = m.message_type;
     m.message_type = IRCMessageType::_DEFAULT;
     line = std::move(m.line);
@@ -174,13 +170,12 @@ class IRCMessage {
     command = std::move(m.command);
     param_vec = std::move(m.param_vec);
   }
-  IRCMessage& operator=(IRCMessage&&) = delete;
+  IRCMessage &operator=(IRCMessage &&) = delete;
   virtual ~IRCMessage() = default;
 
   std::string_view GetTags() const { return tags; }
 
-  const std::vector<std::pair<std::string_view, std::string_view>>& GetTagKV()
-      const {
+  const std::vector<std::pair<std::string_view, std::string_view>> &GetTagKV() const {
     return tag_kv;
   }
 
@@ -188,15 +183,13 @@ class IRCMessage {
 
   std::string_view GetCommand() const { return command; }
 
-  const std::vector<std::string_view>& GetParameters() const {
-    return param_vec;
-  }
+  const std::vector<std::string_view> &GetParameters() const { return param_vec; }
 
   // Friends/Misc
-  friend std::ostream& operator<<(std::ostream& o, const IRCMessage& m) {
+  friend std::ostream &operator<<(std::ostream &o, const IRCMessage &m) {
     if (m.tags != "") o << "Tags=" << m.tags << ' ';
     o << "Source=" << m.source << " Command=" << m.command << " Param=";
-    for (auto& sv : m.param_vec) o << sv << ' ';
+    for (auto &sv : m.param_vec) o << sv << ' ';
     return o << '\n';
   }
 };
@@ -205,13 +198,13 @@ class IRCMessage {
 
 class IRCMessagePing : public IRCMessage {
  public:
-  IRCMessagePing(IRCMessage&& m) : IRCMessage(std::move(m)) {}
+  IRCMessagePing(IRCMessage &&m) : IRCMessage(std::move(m)) {}
   std::string_view GetPongParameter() const { return param_vec.at(0); }
 };
 
 class IRCMessagePrivMsg : public IRCMessage {
  public:
-  IRCMessagePrivMsg(IRCMessage&& m) : IRCMessage(std::move(m)) {}
+  IRCMessagePrivMsg(IRCMessage &&m) : IRCMessage(std::move(m)) {}
   IRCUser GetUser() const {
     IRCUser u = {};
     size_t src_size = source.size();
@@ -241,11 +234,10 @@ struct IRCMessageQuit {};
 
 namespace Message {
 
-inline bool IsUserCapable(const IRCUser& u, const uint64_t cap_mask) {
+inline bool IsUserCapable(const IRCUser &u, const uint64_t cap_mask) {
   // TODO: store admins to a persistent DB
   static uint64_t kkd_cap_mask = UINT64_MAX;
-  if (u.nickname == "kkd" && u.username == "~memxor" &&
-      u.hostname == "unaffiliated/kartikeya") {
+  if (u.nickname == "kkd" && u.username == "~memxor" && u.hostname == "unaffiliated/kartikeya") {
     if ((kkd_cap_mask & cap_mask) != 0) return true;
   }
   return false;
@@ -256,26 +248,23 @@ inline bool IsUserMessage(std::string_view source) {
   return true;
 }
 
-inline bool IsServerMessage(std::string_view source) {
-  return !IsUserMessage(std::move(source));
-}
+inline bool IsServerMessage(std::string_view source) { return !IsUserMessage(std::move(source)); }
 
-inline bool IsQuitMessage(const IRCMessage& m) {
+inline bool IsQuitMessage(const IRCMessage &m) {
   if (IsServerMessage(m.GetSource())) return false;
-  auto& params = m.GetParameters();
+  auto &params = m.GetParameters();
   if (params.size() > 1 && !(params.at(1) == ":,quit")) return false;
   if (m.message_type != IRCMessageType::PRIVMSG) return false;
-  if (!IsUserCapable(static_cast<const IRCMessagePrivMsg&>(m).GetUser(), kQuit))
-    return false;
+  if (!IsUserCapable(static_cast<const IRCMessagePrivMsg &>(m).GetUser(), kQuit)) return false;
   return true;
 }
 
-inline bool IsPingMessage(const IRCMessage& m) {
+inline bool IsPingMessage(const IRCMessage &m) {
   if (m.GetCommand() == "PING") return true;
   return false;
 }
 
-inline bool IsPrivMsgMessage(const IRCMessage& m) {
+inline bool IsPrivMsgMessage(const IRCMessage &m) {
   if (IsServerMessage(m.GetSource())) return false;
   if (m.GetCommand() != "PRIVMSG") return false;
   return true;
@@ -284,10 +273,9 @@ inline bool IsPrivMsgMessage(const IRCMessage& m) {
 }  // namespace Message
 
 using IRCMessageVariant =
-    std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessagePrivMsg,
-                 IRCMessageQuit>;
+    std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessagePrivMsg, IRCMessageQuit>;
 
-IRCMessageType GetSetIRCMessageType(IRCMessage& m);
-IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage&& m);
+IRCMessageType GetSetIRCMessageType(IRCMessage &m);
+IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m);
 
 }  // namespace kbot
