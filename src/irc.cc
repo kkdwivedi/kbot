@@ -172,6 +172,9 @@ IRCMessageType GetSetIRCMessageType(IRCMessage &m) {
       return m.message_type = IRCMessageType::PART;
     case GetCommandMaskAsUint("PRIVMSG"):
       return m.message_type = IRCMessageType::PRIVMSG;
+    case GetCommandMaskAsUint("KILL"):
+    case GetCommandMaskAsUint("QUIT"):
+      return m.message_type = IRCMessageType::QUIT;
     default:
       return m.message_type = IRCMessageType::_DEFAULT;
   }

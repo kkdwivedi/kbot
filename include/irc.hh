@@ -144,11 +144,13 @@ class IRCMessage {
       if (command == "") throw "No command present";
     }
     prev = i;
-    while ((i = line.find(' ', prev)) != line.npos) {
-      param_vec.push_back(std::string_view(&line[prev], &line[i]));
-      prev = i + 1;
+    while (prev != line.npos) {
+      i = line.find_first_of(' ', prev);
+      auto end = i == line.npos ? line.size() : i;
+      param_vec.push_back(std::string_view(&line[prev], &line[end]));
+      if (i == line.npos) break;
+      prev = line.find_first_not_of(' ', i + 1);
     }
-    param_vec.push_back(std::string_view(&line[prev]));
     if (param_vec.size() == 0 || param_vec[0] == "") throw "Bad parameter present";
     line.shrink_to_fit();
     param_vec.shrink_to_fit();
@@ -217,10 +219,20 @@ class IRCMessageNick : public IRCMessage {
 
 class IRCMessagePrivMsg : public IRCMessage {
  public:
-  static inline constexpr size_t FirstParamForUserCommand = 2;
-  IRCMessagePrivMsg(IRCMessage &&m) : IRCMessage(std::move(m)) {}
+  IRCMessagePrivMsg(IRCMessage &&m) : IRCMessage(std::move(m)) {
+    // The buffer name is always present in the parameter, everything else is optional
+    assert(param_vec.size() >= 1);
+  }
   IRCUser GetUser() const { return Message::ParseSourceUser(source); }
   std::string_view GetChannel() const { return param_vec.at(0); }
+  std::string_view GetUserCommand() const { return param_vec.at(1); }
+  std::vector<std::string_view> GetUserCommandParameters() const {
+    // First is channel, then the user command itself, so skip those two
+    if (param_vec.size() < 2) {
+      throw std::out_of_range("Not adequate parameters for user command");
+    }
+    return std::vector<std::string_view>(param_vec.begin() + 2, param_vec.end());
+  }
 };
 
 struct IRCMessageQuit {};

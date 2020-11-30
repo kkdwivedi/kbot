@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
   bool ssl = false;
 
   google::InitGoogleLogging(argv[0]);
+  google::InstallFailureSignalHandler();
   int opt = -1;
   while ((opt = getopt(argc, argv, "hs:n:p:c:x::l")) != -1) {
     switch (opt) {
@@ -64,8 +65,10 @@ int main(int argc, char *argv[]) {
       case 'x':
         if (optarg != nullptr)
           password = optarg;
-        else
+        else {
+          std::cout << "Please enter your password: ";
           std::cin >> password;
+        }
         break;
       case 'l':
         ssl = true;
@@ -82,9 +85,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   auto root = kbot::LaunchServerThread(
-      [nickname, channel](kbot::Server &&server) {
+      [nickname, password, channel](kbot::Server &&server) {
         auto m = kbot::Manager::CreateNew(std::move(server));
-        auto r = m.server.Login(nickname);
+        auto r = m.server.Login(nickname, password);
         if (r < 0) {
           PLOG(ERROR) << "Login failed";
           return;

@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 
+using namespace std::string_view_literals;
+
 TEST(IRCMessage, FullParsing1) {
   const kbot::IRCMessage m("@url=;netsplit=tur,ty :dan!d@localhost PRIVMSG #chan :hey what's up!");
   std::cout << m;
@@ -27,6 +29,16 @@ TEST(IRCMessage, TagParsing1) {
   ASSERT_EQ(tag_kv[0].second, "");
   ASSERT_EQ(tag_kv[1].first, "netsplit");
   ASSERT_EQ(tag_kv[1].second, "tur,ty");
+}
+
+TEST(IRCMessage, ParametersSpaces1) {
+  const kbot::IRCMessage m(":source command 1 2 3 4 ");
+  ASSERT_EQ(m.GetParameters().size(), 4);
+  ASSERT_EQ(m.GetParameters().at(0), "1"sv);
+  ASSERT_EQ(m.GetParameters().at(1), "2"sv);
+  ASSERT_EQ(m.GetParameters().at(2), "3"sv);
+  ASSERT_EQ(m.GetParameters().at(3), "4"sv);
+  ASSERT_THROW((void)m.GetParameters().at(4), std::out_of_range);
 }
 
 TEST(IRCMessage, BadMessage1) {
