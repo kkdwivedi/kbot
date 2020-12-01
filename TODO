@@ -12,6 +12,11 @@ Future
 * CGroup based resource management for plugins (requires delegation)
 * Explore io_uring
 
+Cleanups
+--------
+* Audit insert calls
+* Heterogenous Lookups
+
 Plugins
 --
 * Version
