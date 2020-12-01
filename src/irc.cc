@@ -118,7 +118,10 @@ std::string IRC::RecvMsg() const {
     buf.resize(r + 4096);
     ssize_t p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL | MSG_DONTWAIT);
     if (p <= 0) {
-      if (errno != EAGAIN) PLOG(ERROR) << "Failed to receive data: " << strerror(errno);
+      if (errno != EAGAIN) {
+        PLOG(ERROR) << "Failed to receive data";
+        return "";
+      }
       if (r)
         break;
       else
@@ -186,14 +189,16 @@ IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m) {
     case IRCMessageType::PING:
       mv.emplace<IRCMessagePing>(std::move(m));
       return mv;
-    /*
-    case IRCMessageType::LOGIN:
-    case IRCMessageType::JOIN:
-    case IRCMessageType::PART:
-    */
+      // case IRCMessageType::LOGIN:
     case IRCMessageType::NICK:
       assert(Message::IsUserMessage(m.GetSource()));
       mv.emplace<IRCMessageNick>(std::move(m));
+      return mv;
+    case IRCMessageType::JOIN:
+      mv.emplace<IRCMessageJoin>(std::move(m));
+      return mv;
+    case IRCMessageType::PART:
+      mv.emplace<IRCMessagePart>(std::move(m));
       return mv;
     case IRCMessageType::PRIVMSG:
       assert(!Message::IsServerMessage(m.GetSource()));

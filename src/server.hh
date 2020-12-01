@@ -1,5 +1,6 @@
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
 #include <glog/logging.h>
 
 #include <atomic>
@@ -54,7 +55,7 @@ class Server : public IRC {
   std::string address;
   uint16_t port;
   std::shared_mutex chan_mtx;
-  std::unordered_map<std::string, std::unique_ptr<Channel>> chan_map;
+  absl::flat_hash_map<std::string, Channel> chan_map;
   std::mutex nick_mtx;
   std::string nickname;
 
@@ -97,20 +98,21 @@ class Server : public IRC {
   }
   // Channel API
   void JoinChannel(std::string_view channel);
-  void UpdateChannel(std::string_view channel);
+  void UpdateJoinChannel(std::string_view channel);
+  void UpdatePartChannel(std::string_view channel);
   bool SendChannel(std::string_view channel, std::string_view msg);
   bool SetTopic(std::string_view channel, std::string_view topic);
   std::string GetTopic(std::string_view channel);
-  void PartChannel(std::string_view channel);
+  bool PartChannel(std::string_view channel);
 };
 
 struct Channel {
-  Channel() = default;
-  Channel(const Channel &) = delete;
-  Channel &operator=(const Channel &) = delete;
-  Channel(Channel &&) = delete;
-  Channel &operator=(Channel &&) = delete;
-  ~Channel() = default;
+  enum State {
+    JoinRequested,
+    Joined,
+    PartRequested,
+    // Parted
+  } state = JoinRequested;
 };
 
 std::optional<Server> ConnectionNew(std::string, uint16_t, const char *);

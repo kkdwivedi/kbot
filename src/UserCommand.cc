@@ -12,8 +12,13 @@ namespace kbot {
 namespace UserCommand {
 
 void SendInvokerReply(Manager &m, const IRCMessagePrivMsg &msg, std::string_view reply) {
-  m.server.SendChannel(msg.GetChannel(),
-                       std::string(msg.GetUser().nickname).append(": ").append(reply));
+  auto u = msg.GetUser();
+  std::string_view recv = msg.GetChannel();
+  if (recv == m.server.GetNickname()) {
+    // Private buffer
+    recv = u.nickname;
+  }
+  m.server.SendChannel(recv, std::string(msg.GetUser().nickname).append(": ").append(reply));
 }
 
 bool InvokerPermissionCheck(Manager &m, const IRCMessagePrivMsg &msg, IRCUserCapability mask) {
@@ -47,7 +52,9 @@ void BuiltinCommandJoin(Manager &m, const IRCMessagePrivMsg &msg) {
 
 void BuiltinCommandPart(Manager &m, const IRCMessagePrivMsg &msg) {
   if (InvokerPermissionCheck(m, msg, IRCUserCapability::kPart)) {
-    m.server.PartChannel(msg.GetUserCommandParameters().at(0));
+    if (!m.server.PartChannel(msg.GetUserCommandParameters().at(0))) {
+      SendInvokerReply(m, msg, "Error: No such channel exists.");
+    }
   }
 }
 

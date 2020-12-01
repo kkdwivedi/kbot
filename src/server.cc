@@ -40,8 +40,16 @@ void Server::DumpInfo() {
     DLOG(INFO) << "Nickname: " << nickname;
   }
   std::shared_lock read_lock(chan_mtx);
+  DLOG(INFO) << " Channel(s): ";
+  bool count = false;
   for (auto &p : chan_map) {
-    DLOG(INFO) << " Channel: " << p.first;
+    if (p.second.state == Channel::Joined) {
+      DLOG(INFO) << p.first << " ";
+      count = true;
+    }
+  }
+  if (!count) {
+    DLOG(INFO) << "(none)";
   }
 }
 
@@ -53,46 +61,61 @@ void Server::SetState(const ServerState state_) {
 
 // Channel API
 
-// TODO: Switch to heterogenous lookup whenever it is available for C++20
-
 void Server::JoinChannel(std::string_view channel) {
   std::unique_lock lock(chan_mtx);
-  if (auto it = chan_map.find(std::string(channel)); it == chan_map.end()) {
-    auto r = IRC::Join(channel);
-    if (r < 0) {
-      LOG(ERROR) << "Failed to initiate Join request for channel: " << channel;
-      return;
-    }
-    chan_map.insert({std::string(channel), std::make_unique<Channel>()});
+  auto it = chan_map.find(channel);
+  auto r = IRC::Join(channel);
+  if (r < 0) {
+    PLOG(ERROR) << "Failed to initiate Join request for channel: " << channel;
+    return;
+  }
+  if (it == chan_map.end()) {
+    chan_map.insert({std::string(channel), Channel{Channel::JoinRequested}});
   } else {
+    it->second.state = Channel::JoinRequested;
     return;
   }
 }
 
-bool Server::SendChannel(std::string_view channel, std::string_view msg) {
+void Server::UpdateJoinChannel(std::string_view channel) {
   std::unique_lock lock(chan_mtx);
-  auto it = chan_map.find(std::string(channel));
-  if (it != chan_map.end()) {
-    return IRC::PrivMsg(channel, msg);
-  } else {
-    LOG(ERROR) << "Failed to send message to channel: " << channel << "; No such channel present";
-    return false;
+  if (auto it = chan_map.find(channel); it != chan_map.end()) {
+    if (it->second.state == Channel::JoinRequested) {
+      it->second.state = Channel::Joined;
+    } else {
+      DLOG(INFO) << "Part has already been requested for " << channel;
+    }
   }
 }
 
-void Server::PartChannel(std::string_view channel) {
+void Server::UpdatePartChannel(std::string_view channel) {
   std::unique_lock lock(chan_mtx);
-  std::string chan_str(channel);
-  auto it = chan_map.find(chan_str);
-  if (it != chan_map.end()) {
+  if (auto it = chan_map.find(channel); it != chan_map.end()) {
+    if (it->second.state == Channel::PartRequested) {
+      chan_map.erase(it);
+    } else {
+      DLOG(INFO) << "Rejoin has already been requested for " << channel;
+    }
+  }
+}
+
+bool Server::SendChannel(std::string_view channel, std::string_view msg) {
+  return IRC::PrivMsg(channel, msg);
+}
+
+bool Server::PartChannel(std::string_view channel) {
+  std::unique_lock lock(chan_mtx);
+  if (auto it = chan_map.find(channel); it != chan_map.end()) {
     auto r = IRC::Part(channel);
     if (r < 0) {
-      LOG(ERROR) << "Failed to part channel: " << channel;
-      return;
+      PLOG(ERROR) << "Failed to initiate Part request for channel: " << channel;
+      return false;
     }
-    chan_map.erase(chan_str);
+    it->second.state = Channel::PartRequested;
+    return true;
   } else {
     LOG(ERROR) << "Failed to part channel: " << channel << "; No such channel present";
+    return false;
   }
 }
 

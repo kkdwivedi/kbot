@@ -139,6 +139,16 @@ void BuiltinNickname(Manager &m, const IRCMessageNick &msg) {
   m.server.UpdateNickname(msg.GetUser().nickname, new_nick);
 }
 
+void BuiltinJoin(Manager &m, const IRCMessageJoin &msg) {
+  DLOG(INFO) << "Join request completion received for" << msg.GetChannel();
+  m.server.UpdateJoinChannel(msg.GetChannel());
+}
+
+void BuiltinPart(Manager &m, const IRCMessagePart &msg) {
+  DLOG(INFO) << "Part request completion received for " << msg.GetChannel();
+  m.server.UpdatePartChannel(msg.GetChannel());
+}
+
 void BuiltinPrivMsg(Manager &m, const IRCMessagePrivMsg &msg) {
   std::shared_lock lock(UserCommand::user_command_mtx);
   try {
@@ -168,6 +178,8 @@ constexpr auto IRCMessageVisitor = OverloadSet{
     [](Manager &, const IRCMessage &) {},
     [](Manager &m, const IRCMessagePing &msg) { BuiltinPong(m, msg); },
     [](Manager &m, const IRCMessageNick &msg) { BuiltinNickname(m, msg); },
+    [](Manager &m, const IRCMessageJoin &msg) { BuiltinJoin(m, msg); },
+    [](Manager &m, const IRCMessagePart &msg) { BuiltinPart(m, msg); },
     [](Manager &m, const IRCMessagePrivMsg &msg) { BuiltinPrivMsg(m, msg); },
     [](Manager &, const IRCMessageQuit &) {}};
 

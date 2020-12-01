@@ -217,6 +217,18 @@ class IRCMessageNick : public IRCMessage {
   IRCUser GetUser() const { return Message::ParseSourceUser(source); }
 };
 
+class IRCMessageJoin : public IRCMessage {
+ public:
+  IRCMessageJoin(IRCMessage &&m) : IRCMessage(std::move(m)) {}
+  std::string_view GetChannel() const { return param_vec.at(0); }
+};
+
+class IRCMessagePart : public IRCMessage {
+ public:
+  IRCMessagePart(IRCMessage &&m) : IRCMessage(std::move(m)) {}
+  std::string_view GetChannel() const { return param_vec.at(0); }
+};
+
 class IRCMessagePrivMsg : public IRCMessage {
  public:
   IRCMessagePrivMsg(IRCMessage &&m) : IRCMessage(std::move(m)) {
@@ -262,7 +274,7 @@ inline bool IsQuitMessage(const IRCMessage &m) {
   auto &params = m.GetParameters();
   if (params.size() > 1 && !(params.at(1) == ":,quit")) return false;
   if (m.message_type != IRCMessageType::PRIVMSG) return false;
-  if (!IsUserCapable(static_cast<const IRCMessagePrivMsg &>(m).GetUser(), kQuit)) return false;
+  if (!IsUserCapable(ParseSourceUser(m.GetSource()), kQuit)) return false;
   return true;
 }
 
@@ -302,8 +314,9 @@ inline IRCUser ParseSourceUser(std::string_view source) {
 
 }  // namespace Message
 
-using IRCMessageVariant = std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessageNick,
-                                       IRCMessagePrivMsg, IRCMessageQuit>;
+using IRCMessageVariant =
+    std::variant<std::monostate, IRCMessage, IRCMessagePing, IRCMessageNick, IRCMessageJoin,
+                 IRCMessagePart, IRCMessagePrivMsg, IRCMessageQuit>;
 
 IRCMessageType GetSetIRCMessageType(IRCMessage &m);
 IRCMessageVariant GetIRCMessageVariantFrom(IRCMessage &&m);

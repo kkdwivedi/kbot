@@ -1,5 +1,6 @@
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
 #include <glog/logging.h>
 #include <semaphore.h>
 #include <signal.h>
@@ -28,8 +29,8 @@ class Manager {
   io::EpollManager epm;
   int sigfd = -1;
   sigset_t cur_set;
-  std::unordered_map<int, std::function<void(struct signalfd_siginfo &)>> signalfd_sig_map;
-  std::unordered_map<int, std::function<void(int)>> timerfd_set;
+  absl::flat_hash_map<int, std::function<void(struct signalfd_siginfo &)>> signalfd_sig_map;
+  absl::flat_hash_map<int, std::function<void(int)>> timerfd_set;
 
   static inline std::atomic<int> sigId = SIGRTMIN;
 
