@@ -1,3 +1,10 @@
 build
 .clangd
+CMakeCache.txt
+Makefile
+CMakeFiles
+CTestTestfile.cmake
+Testing
+test_*
+cmake_install.cmake
 compile_commands.json
