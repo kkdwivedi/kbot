@@ -91,12 +91,4 @@ requires ServerThreadCallable<Callable, Args...> std::jthread LaunchServerThread
 
 void WorkerRun(Manager m);
 
-using privmsg_callback_t = void (*)(Server &, const IRCMessagePrivMsg &);
-
-extern std::recursive_mutex privmsg_callback_map_mtx;
-
-bool AddPrivMsgCallback(std::string_view command, privmsg_callback_t cb_ptr);
-auto GetPrivMsgCallback(std::string_view command) -> privmsg_callback_t;
-bool DelPrivMsgCallback(std::string_view command);
-
 }  // namespace kbot

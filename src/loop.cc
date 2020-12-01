@@ -2,6 +2,7 @@
 #include <poll.h>
 #include <sys/signalfd.h>
 
+#include <UserCommand.hh>
 #include <cassert>
 #include <cstring>
 #include <exception>
@@ -14,7 +15,6 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -128,129 +128,32 @@ bool Manager::DeleteSignalEvent(int signal) {
 
 namespace {
 
-void cb_pong(Server &s, const IRCMessage &m) {
-  LOG(INFO) << "Received PING, replying with PONG to " << m.GetParameters()[0];
-  s.SendMsg("PONG :" + std::string(m.GetParameters()[0].substr(1, std::string::npos)));
+void BuiltinPong(Manager &m, const IRCMessage &msg) {
+  LOG(INFO) << "Received PING, replying with PONG to " << msg.GetParameters()[0];
+  m.server.SendMsg("PONG :" + std::string(msg.GetParameters()[0].substr(1, std::string::npos)));
 }
 
-void cb_nickname(Server &s, const IRCMessageNick &m) {
-  std::string_view new_nick = m.GetNewNickname();
+void BuiltinNickname(Manager &m, const IRCMessageNick &msg) {
+  std::string_view new_nick = msg.GetNewNickname();
   LOG(INFO) << "Nickname change received, applying " << new_nick;
-  s.UpdateNickname(m.GetUser().nickname, new_nick);
+  m.server.UpdateNickname(msg.GetUser().nickname, new_nick);
 }
 
-bool ExpectUserCommandArgsRange(const IRCMessagePrivMsg &m, unsigned min, unsigned max = 1024) {
-  // 2, one for the buffer name, and one for the command itself
-  assert(min >= 1 && max <= 1024);
-  if (m.GetParameters().size() >= min + 2 && m.GetParameters().size() <= max + 2) {
-    return true;
-  }
-  return false;
-}
-
-// Can create as an entrypoint
-void SendInvokerReply(Server &s, const IRCMessagePrivMsg &m, std::string_view str) {
-  s.SendChannel(m.GetChannel(), std::string(m.GetUser().nickname).append(": ").append(str));
-}
-
-void cb_privmsg_hello(Server &s, const IRCMessagePrivMsg &m) { SendInvokerReply(s, m, "Hello!"); }
-
-void cb_privmsg_nick(Server &s, const IRCMessagePrivMsg &m) {
-  if (ExpectUserCommandArgsRange(m, 1, 1)) {
-    if (Message::IsUserCapable(m.GetUser(), IRCUserCapability::kNickModify)) {
-      s.SetNickname(m.GetUserCommandParameters().at(0));
-    } else {
-      SendInvokerReply(s, m, "You don't have permission to use ,join.");
-    }
-  } else {
-    SendInvokerReply(s, m, "Incorrect number of arguments to ,nick, see ,help.");
-  }
-}
-
-void cb_privmsg_join(Server &s, const IRCMessagePrivMsg &m) {
-  if (ExpectUserCommandArgsRange(m, 1, 1)) {
-    if (Message::IsUserCapable(m.GetUser(), IRCUserCapability::kJoin)) {
-      s.JoinChannel(m.GetUserCommandParameters().at(0));
-    } else {
-      SendInvokerReply(s, m, "You don't have permission to use ,join.");
-    }
-  } else {
-    SendInvokerReply(s, m, "Incorrect number of arguments to ,join, see ,help.");
-  }
-}
-
-void cb_privmsg_part(Server &s, const IRCMessagePrivMsg &m) {
-  if (ExpectUserCommandArgsRange(m, 1, 1)) {
-    if (Message::IsUserCapable(m.GetUser(), IRCUserCapability::kPart)) {
-      s.PartChannel(m.GetUserCommandParameters().at(0));
-    } else {
-      SendInvokerReply(s, m, "You don't have permission to use ,part.");
-    }
-  } else {
-    SendInvokerReply(s, m, "Incorrect number of arguments to ,part, see ,help.");
-  }
-}
-
-void cb_privmsg_load(Server &s, const IRCMessagePrivMsg &m) {
-  SendInvokerReply(s, m, "Plugin system currently unimplemented.");
-}
-
-void cb_privmsg_unload(Server &s, const IRCMessagePrivMsg &m) { cb_privmsg_load(s, m); }
-
-void cb_privmsg_help(Server &s, const IRCMessagePrivMsg &m) {
-  SendInvokerReply(s, m, "Commands available: hi, join, part, load, unload, help");
-}
-
-void cb_privmsg(Server &s, const IRCMessagePrivMsg &m) {
-  std::unique_lock lock(privmsg_callback_map_mtx);
+void BuiltinPrivMsg(Manager &m, const IRCMessagePrivMsg &msg) {
+  std::shared_lock lock(UserCommand::user_command_mtx);
   try {
-    assert(m.GetParameters().size() >= 2);
-    auto cb = GetPrivMsgCallback(m.GetUserCommand());
-    if (cb != nullptr) cb(s, m);
+    assert(msg.GetParameters().size() >= 2);
+    auto cb_it = UserCommand::user_command_map.find(msg.GetUserCommand());
+    if (cb_it != UserCommand::user_command_map.end()) {
+      cb_it->second(m, msg);
+    }
   } catch (std::out_of_range &) {
     LOG(ERROR) << "Not enough arguments for user commands, please implement checks";
     return;
   }
 }
 
-// Map for bot commands
-std::unordered_map<std::string_view, privmsg_callback_t> privmsg_callback_map = {
-    {":,quit", nullptr},
-    {":,nick", &cb_privmsg_nick},
-    {":,hi", &cb_privmsg_hello},
-    {":,join", &cb_privmsg_join},
-    {":,part", &cb_privmsg_part},
-    {":,load", &cb_privmsg_load},
-    {":,unload", &cb_privmsg_unload},
-    {":,help", &cb_privmsg_help},
-};
-
 }  // namespace
-
-// Mutex held during insertion/deletion
-std::recursive_mutex privmsg_callback_map_mtx;
-
-bool AddPrivMsgCallback(std::string_view command, privmsg_callback_t cb_ptr) {
-  assert(cb_ptr);
-  std::unique_lock lock(privmsg_callback_map_mtx);
-  auto it = privmsg_callback_map.find(command);
-  if (it != privmsg_callback_map.end()) {
-    return true;
-  } else {
-    return privmsg_callback_map.insert({command, cb_ptr}).second;
-  }
-}
-
-auto GetPrivMsgCallback(std::string_view command) -> privmsg_callback_t {
-  std::unique_lock lock(privmsg_callback_map_mtx);
-  auto it = privmsg_callback_map.find(command);
-  return it == privmsg_callback_map.end() ? nullptr : it->second;
-}
-
-bool DelPrivMsgCallback(std::string_view command) {
-  std::unique_lock lock(privmsg_callback_map_mtx);
-  return !!privmsg_callback_map.erase(command);
-}
 
 template <class... T>
 struct OverloadSet : T... {
@@ -261,20 +164,20 @@ template <class... T>
 OverloadSet(T...) -> OverloadSet<T...>;
 
 constexpr auto IRCMessageVisitor = OverloadSet{
-    [](Server &s, const std::monostate &) { LOG(ERROR) << "Visitor for monostate called"; },
-    [](Server &s, const IRCMessage &m) {},
-    [](Server &s, const IRCMessagePing &m) { cb_pong(s, m); },
-    [](Server &s, const IRCMessageNick &m) { cb_nickname(s, m); },
-    [](Server &s, const IRCMessagePrivMsg &m) { cb_privmsg(s, m); },
-    [](Server &s, const IRCMessageQuit &m) {}};
+    [](Manager &, const std::monostate &) { LOG(ERROR) << "Visitor for monostate called"; },
+    [](Manager &, const IRCMessage &) {},
+    [](Manager &m, const IRCMessagePing &msg) { BuiltinPong(m, msg); },
+    [](Manager &m, const IRCMessageNick &msg) { BuiltinNickname(m, msg); },
+    [](Manager &m, const IRCMessagePrivMsg &msg) { BuiltinPrivMsg(m, msg); },
+    [](Manager &, const IRCMessageQuit &) {}};
 
 using VisitorBase = decltype(IRCMessageVisitor);
 
 struct Visitor : VisitorBase {
-  Server &s;
-  explicit Visitor(Server &s) : s(s) {}
+  Manager &m;
+  explicit Visitor(Manager &m) : m(m) {}
   using VisitorBase::operator();
-  void operator()(const auto &m) { VisitorBase::operator()(s, m); }
+  void operator()(const auto &msg) { VisitorBase::operator()(m, msg); }
 };
 
 std::vector<std::string_view> TokenizeMessageMultiple(std::string &msg) {
@@ -289,14 +192,13 @@ std::vector<std::string_view> TokenizeMessageMultiple(std::string &msg) {
   return ret;
 }
 
-bool ProcessMessageLine(Server &s, std::string_view line) try {
-  IRCMessage m(line);
-  DLOG(INFO) << m;
-  auto mv = GetIRCMessageVariantFrom(std::move(m));
+bool ProcessMessageLine(Manager &m, std::string_view line) try {
+  IRCMessage msg(line);
+  DLOG(INFO) << msg;
+  auto mv = GetIRCMessageVariantFrom(std::move(msg));
   // Handle termination early
   if (std::holds_alternative<IRCMessageQuit>(mv)) return false;
-  std::unique_lock lock(privmsg_callback_map_mtx);
-  std::visit(Visitor{s}, mv);
+  std::visit(Visitor{m}, mv);
   return true;
 } catch (std::runtime_error &e) {
   LOG(INFO) << "Caught IRCMessage exception: (" << e.what() << ")";
@@ -315,7 +217,7 @@ void WorkerRun(Manager m) {
           if (msg == "") return;
           std::vector<std::string_view> tok = TokenizeMessageMultiple(msg);
           for (auto &line : tok) {
-            r = ProcessMessageLine(mm.server, line);
+            r = ProcessMessageLine(mm, line);
           }
         },
         io::EpollManager::EpollConfigDefault);
