@@ -120,6 +120,8 @@ bool Server::PartChannel(std::string_view channel) {
 }
 
 // Plugin API
+// Ensure that read lock is not held for the map when calling these methods, especially if the call
+// is not punted to the workqueue
 
 bool Server::AddPluginCommands(std::string_view name, Server::callback_t callback) {
   assert(callback);

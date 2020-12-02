@@ -150,13 +150,15 @@ void BuiltinPart(Manager &m, const IRCMessagePart &msg) {
 }
 
 void BuiltinPrivMsg(Manager &m, const IRCMessagePrivMsg &msg) {
-  std::shared_lock lock(m.server.user_command_mtx);
   try {
     assert(msg.GetParameters().size() >= 2);
     auto cb_it = UserCommand::user_command_map.find(msg.GetUserCommand());
     if (cb_it != UserCommand::user_command_map.end()) {
       cb_it->second(m, msg);
     } else {
+      // Take shared_lock here, as taking it early would mean deadlock when invoking plugin
+      // loading/unloading commands, which modify the server's command map (otherwise DEADLOCK)
+      std::shared_lock lock(m.server.user_command_mtx);
       auto cb_local_it = m.server.user_command_map.find(msg.GetUserCommand());
       if (cb_local_it != m.server.user_command_map.end()) {
         cb_local_it->second(m, msg);

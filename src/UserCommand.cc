@@ -77,12 +77,14 @@ void BuiltinCommandLoadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
 }
 
 void BuiltinCommandUnloadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
+  std::unique_lock lock(m.server.user_command_plugin_map_mtx);
   std::string_view plugin_name = msg.GetUserCommandParameters().at(0);
   if (auto it = m.server.user_command_plugin_map.find(plugin_name);
       it != m.server.user_command_plugin_map.end()) {
     auto del_func = it->second.GetDeletionFunc(it->first);
     assert(del_func);
     del_func(&m.server);
+    LOG(INFO) << "Successfully unloaded plugin";
     m.server.user_command_plugin_map.erase(it);
   } else {
     SendInvokerReply(m, msg, "No such plugin loaded.");
