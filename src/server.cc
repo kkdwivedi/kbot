@@ -131,7 +131,8 @@ bool Server::AddPluginCommands(std::string_view name, Server::callback_t callbac
 
 bool Server::RemovePluginCommands(std::string_view name) {
   std::unique_lock lock(user_command_mtx);
-  if (auto it = user_command_map.find(name); it != user_command_map.end()) {
+  if (auto it = user_command_map.find(std::string(":,").append(name));
+      it != user_command_map.end()) {
     user_command_map.erase(it);
     return true;
   }
