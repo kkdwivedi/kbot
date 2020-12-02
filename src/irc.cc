@@ -92,7 +92,7 @@ ssize_t IRC::Quit(std::string_view msg) const {
       PLOG(ERROR) << "Failed to send QUIT message";
     } else {
       struct pollfd pfd {
-        .fd = this->fd, .events = POLLIN
+        .fd = this->fd, .events = POLLOUT
       };
       poll(&pfd, 1, 5000);
     }
@@ -117,7 +117,7 @@ std::string IRC::RecvMsg() const {
   do {
     buf.resize(r + 4096);
     ssize_t p = recv(fd, buf.data() + r, 4096, MSG_NOSIGNAL | MSG_DONTWAIT);
-    if (p <= 0) {
+    if (p < 0) {
       if (errno != EAGAIN) {
         PLOG(ERROR) << "Failed to receive data";
         return "";
@@ -126,6 +126,8 @@ std::string IRC::RecvMsg() const {
         break;
       else
         return "";
+    } else if (p == 0) {
+      return "";
     }
     r += static_cast<size_t>(p);
   } while (buf[r - 1] != '\n' && tries--);

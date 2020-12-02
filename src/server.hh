@@ -1,6 +1,7 @@
 #pragma once
 
 #include <absl/container/flat_hash_map.h>
+#include <dlfcn.h>
 #include <glog/logging.h>
 
 #include <atomic>
@@ -10,9 +11,9 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 namespace kbot {
 
@@ -49,6 +50,44 @@ constexpr const char *const ChannelStateStringTable[ChannelStateMax] = {
 };
 
 struct Channel;
+class Manager;
+
+namespace UserCommand {
+
+// UserCommand Plugins
+// These are automatically ref-counted, so each server user just needs to keep the Plugin object
+// alive for itself while it's loaded, mapped to its internal user_command_map. This is in this
+// header due to the interdependencies.
+
+class UserCommandPlugin {
+  void *handle = nullptr;
+
+  void CloseHandle() {
+    if (handle) {
+      dlclose(handle);
+    }
+  }
+
+ public:
+  UserCommandPlugin() = default;
+  UserCommandPlugin(UserCommandPlugin &) = delete;
+  UserCommandPlugin &operator=(UserCommandPlugin &) = delete;
+  UserCommandPlugin(UserCommandPlugin &&u) { std::swap(handle, u.handle); }
+  UserCommandPlugin &operator=(UserCommandPlugin &&u) {
+    dlclose(handle);
+    handle = nullptr;
+    std::swap(handle, u.handle);
+    return *this;
+  }
+  ~UserCommandPlugin() { CloseHandle(); }
+
+  using registration_callback_t = void (*)(void *);
+  bool OpenHandle(std::string_view name);
+  registration_callback_t GetRegistrationFunc(std::string_view plugin_name);
+  registration_callback_t GetDeletionFunc(std::string_view plugin_name);
+};
+
+}  // namespace UserCommand
 
 class Server : public IRC {
   std::atomic<ServerState> state = ServerState::kDisconnected;
@@ -59,7 +98,14 @@ class Server : public IRC {
   std::mutex nick_mtx;
   std::string nickname;
 
+  using callback_t = void (*)(Manager &, const IRCMessagePrivMsg &);
+
  public:
+  std::shared_mutex user_command_mtx;
+  absl::flat_hash_map<std::string, callback_t> user_command_map;
+  std::mutex user_command_plugin_map_mtx;
+  absl::flat_hash_map<std::string, UserCommand::UserCommandPlugin> user_command_plugin_map;
+
   explicit Server(int sockfd, std::string address, uint16_t port, const char *nickname)
       : IRC(sockfd), address(std::move(address)), port(port), nickname(nickname) {}
   Server(const Server &) = delete;
@@ -104,6 +150,11 @@ class Server : public IRC {
   bool SetTopic(std::string_view channel, std::string_view topic);
   std::string GetTopic(std::string_view channel);
   bool PartChannel(std::string_view channel);
+  // Plugin API
+  bool AddPluginCommands(std::string_view name, callback_t);
+  bool AddPluginCommands(std::span<std::pair<std::string_view, callback_t>> commands);
+  bool RemovePluginCommands(std::string_view name);
+  bool RemovePluginCommands(std::span<std::string_view> commands);
 };
 
 struct Channel {

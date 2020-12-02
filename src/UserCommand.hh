@@ -1,10 +1,13 @@
 #pragma once
 
 #include <absl/container/flat_hash_map.h>
+#include <glog/logging.h>
+#include <linux/limits.h>
+#include <unistd.h>
 
 #include <irc.hh>
 #include <loop.hh>
-#include <shared_mutex>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -23,10 +26,8 @@ namespace UserCommand {
 
 using callback_t = void (*)(Manager &, const IRCMessagePrivMsg &);
 
-// Mutex held while operating on hash map
-inline std::shared_mutex user_command_mtx;
-// Hash map storing calback
-extern absl::flat_hash_map<std::string, callback_t> user_command_map;
+// Hash map storing callbacks
+extern const absl::flat_hash_map<std::string, callback_t> user_command_map;
 
 void SendInvokerReply(Manager &m, const IRCMessagePrivMsg &msg, std::string_view reply);
 bool InvokerPermissionCheck(Manager &m, const IRCMessagePrivMsg &msg, IRCUserCapability mask);

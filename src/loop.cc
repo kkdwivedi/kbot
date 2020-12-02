@@ -150,12 +150,17 @@ void BuiltinPart(Manager &m, const IRCMessagePart &msg) {
 }
 
 void BuiltinPrivMsg(Manager &m, const IRCMessagePrivMsg &msg) {
-  std::shared_lock lock(UserCommand::user_command_mtx);
+  std::shared_lock lock(m.server.user_command_mtx);
   try {
     assert(msg.GetParameters().size() >= 2);
     auto cb_it = UserCommand::user_command_map.find(msg.GetUserCommand());
     if (cb_it != UserCommand::user_command_map.end()) {
       cb_it->second(m, msg);
+    } else {
+      auto cb_local_it = m.server.user_command_map.find(msg.GetUserCommand());
+      if (cb_local_it != m.server.user_command_map.end()) {
+        cb_local_it->second(m, msg);
+      }
     }
   } catch (std::out_of_range &) {
     LOG(ERROR) << "Not enough arguments for user commands, please implement checks";

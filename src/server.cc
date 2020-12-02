@@ -119,6 +119,24 @@ bool Server::PartChannel(std::string_view channel) {
   }
 }
 
+// Plugin API
+
+bool Server::AddPluginCommands(std::string_view name, Server::callback_t callback) {
+  assert(callback);
+  std::unique_lock lock(user_command_mtx);
+  return user_command_map.insert({std::string(":,").append(name), callback}).second;
+}
+
+bool Server::RemovePluginCommands(std::string_view name) {
+  std::unique_lock lock(user_command_mtx);
+  if (auto it = user_command_map.find(name); it != user_command_map.end()) {
+    user_command_map.erase(it);
+    return true;
+  }
+  LOG(ERROR) << "Command " << name << " not found, cannot remove for server " << GetAddress();
+  return false;
+}
+
 namespace {
 
 int GetConnectionFd(const char *addr, uint16_t port) {
