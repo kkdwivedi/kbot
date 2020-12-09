@@ -6,20 +6,77 @@
 #include <unistd.h>
 
 #include <Database.hh>
+#include <IRC.hh>
+#include <Server.hh>
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <irc.hh>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <server.hh>
 #include <shared_mutex>
 #include <unordered_map>
 
 namespace kbot {
+
+// CommandPlugin
+// Implements the class that owns each plugin shared object. Internally the object is ref-counted
+// and access is thread safe so we don't need to take care of synchronization except when accessing
+// our own data.
+
+bool CommandPlugin::OpenHandle(std::string_view name) {
+  struct RAII {
+    char *ptr = get_current_dir_name();
+    ~RAII() { free(ptr); }
+  } r;
+  if (r.ptr) {
+    std::string cwd(r.ptr);
+    cwd.append("/lib").append(name).append(".so");
+    if (cwd.size() > PATH_MAX) {
+      return false;
+    } else {
+      handle = dlopen(cwd.c_str(), RTLD_LAZY);
+      if (handle != nullptr) {
+        return true;
+      } else {
+        PLOG(ERROR) << "Failed to load plugin";
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+namespace {
+
+CommandPlugin::registration_callback_t GetFunc(void *handle, std::string_view symbol) {
+  (void)dlerror();
+  auto sym = dlsym(handle, symbol.data());
+  if (sym) {
+    return reinterpret_cast<CommandPlugin::registration_callback_t>(sym);
+  } else {
+    LOG(ERROR) << (dlerror() ?: "Symbol not found");
+    return nullptr;
+  }
+}
+
+}  // namespace
+
+CommandPlugin::registration_callback_t CommandPlugin::GetRegistrationFunc(
+    std::string_view plugin_name) {
+  return GetFunc(handle, std::string("RegisterPluginCommands_").append(plugin_name));
+}
+
+CommandPlugin::registration_callback_t CommandPlugin::GetDeletionFunc(
+    std::string_view plugin_name) {
+  return GetFunc(handle, std::string("DeletePluginCommands_").append(plugin_name));
+}
+
+CommandPlugin::registration_callback_t CommandPlugin::GetHelpFunc(std::string_view plugin_name) {
+  return GetFunc(handle, std::string("HelpPluginCommands_").append(plugin_name));
+}
 
 // Server
 

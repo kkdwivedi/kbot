@@ -2,16 +2,16 @@
 #include <poll.h>
 #include <sys/signalfd.h>
 
+#include <IRC.hh>
+#include <Manager.hh>
+#include <Server.hh>
 #include <UserCommand.hh>
 #include <cassert>
 #include <cstring>
 #include <exception>
 #include <iostream>
-#include <irc.hh>
-#include <loop.hh>
 #include <mutex>
 #include <optional>
-#include <server.hh>
 #include <stdexcept>
 #include <string_view>
 #include <thread>

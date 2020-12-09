@@ -5,10 +5,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <IRC.hh>
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <irc.hh>
 #include <memory>
 #include <string>
 #include <string_view>

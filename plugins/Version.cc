@@ -1,10 +1,10 @@
 #include <absl/container/flat_hash_set.h>
 
+#include <IRC.hh>
+#include <Manager.hh>
+#include <Server.hh>
 #include <UserCommand.hh>
-#include <irc.hh>
-#include <loop.hh>
 #include <mutex>
-#include <server.hh>
 
 #define VERSION_STRING "0.1"
 
@@ -59,6 +59,12 @@ void DeletePluginCommands_version(void *p) {
   if (s->RemovePluginCommands(command_map[0].first)) {
     RemoveServerFromSet(s);
   }
+}
+
+void HelpPluginCommands_version(void *p) {
+  assert(p);
+  auto s = static_cast<std::pair<kbot::Manager *, kbot::IRCMessagePrivMsg *> *>(p);
+  kbot::UserCommand::SendInvokerReply(*s->first, *s->second, "Usage: ,version");
 }
 
 }  // extern "C"

@@ -1,11 +1,11 @@
 #include <absl/container/flat_hash_map.h>
 #include <dlfcn.h>
 
+#include <IRC.hh>
+#include <Manager.hh>
+#include <Server.hh>
 #include <UserCommand.hh>
-#include <irc.hh>
-#include <loop.hh>
 #include <mutex>
-#include <server.hh>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -61,16 +61,15 @@ void BuiltinCommandPart(Manager &m, const IRCMessagePrivMsg &msg) {
 }
 
 void BuiltinCommandLoadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
-  UserCommandPlugin u;
+  CommandPlugin u;
   std::string_view plugin_name = msg.GetUserCommandParameters().at(0);
   if (u.OpenHandle(plugin_name)) {
     auto reg_func = u.GetRegistrationFunc(plugin_name);
     assert(reg_func);
     reg_func(&m.server);
     LOG(INFO) << "Successfully loaded plugin";
-    std::unique_lock lock(m.server.user_command_plugin_map_mtx);
-    m.server.user_command_plugin_map.insert(
-        {std::string(plugin_name), UserCommandPlugin{std::move(u)}});
+    std::unique_lock lock(m.server.plugins_map_mtx);
+    m.server.plugins_map.insert({std::string(plugin_name), CommandPlugin{std::move(u)}});
     SendInvokerReply(m, msg, std::string("Loaded ").append(plugin_name));
   } else {
     SendInvokerReply(m, msg, "Failed to load plugin.");
@@ -78,15 +77,14 @@ void BuiltinCommandLoadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
 }
 
 void BuiltinCommandUnloadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
-  std::unique_lock lock(m.server.user_command_plugin_map_mtx);
+  std::unique_lock lock(m.server.plugins_map_mtx);
   std::string_view plugin_name = msg.GetUserCommandParameters().at(0);
-  if (auto it = m.server.user_command_plugin_map.find(plugin_name);
-      it != m.server.user_command_plugin_map.end()) {
+  if (auto it = m.server.plugins_map.find(plugin_name); it != m.server.plugins_map.end()) {
     auto del_func = it->second.GetDeletionFunc(it->first);
     assert(del_func);
     del_func(&m.server);
     LOG(INFO) << "Successfully unloaded plugin";
-    m.server.user_command_plugin_map.erase(it);
+    m.server.plugins_map.erase(it);
     SendInvokerReply(m, msg, std::string("Unloaded ").append(plugin_name));
   } else {
     SendInvokerReply(m, msg, "No such plugin loaded.");
@@ -94,14 +92,28 @@ void BuiltinCommandUnloadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
 }
 
 void BuiltinCommandHelp(Manager &m, const IRCMessagePrivMsg &msg) {
-  SendInvokerReply(m, msg, "Commands available: ,hi ,join ,part ,load ,unload ,help");
-  std::unique_lock lock(m.server.user_command_mtx);
-  std::string plugin_list("Plugin commands available: ");
-  for (auto &p : m.server.user_command_map) {
-    plugin_list.append(p.first.substr(1)).append(" ");
+  auto v = msg.GetUserCommandParameters();
+  if (v.size()) {
+    std::shared_lock lock(m.server.plugins_map_mtx);
+    auto it = m.server.plugins_map.find(std::string(":,").append(v[0]));
+    if (it != m.server.plugins_map.end()) {
+      auto p = std::make_pair(&m, &msg);
+      it->second.GetHelpFunc(v[0])(&p);
+    } else {
+      SendInvokerReply(m, msg, "No such plugin loaded.");
+    }
+  } else {
+    SendInvokerReply(m, msg, "Commands available: ,hi ,nick ,join ,part ,load ,unload");
+    std::string plugin_list;
+    {
+      std::unique_lock lock(m.server.user_command_mtx);
+      plugin_list.append("Plugin commands available: ");
+      for (auto &p : m.server.user_command_map) {
+        plugin_list.append(p.first.substr(1)).append(" ");
+      }
+    }
+    SendInvokerReply(m, msg, plugin_list);
   }
-  lock.unlock();
-  SendInvokerReply(m, msg, plugin_list);
 }
 
 }  // namespace
@@ -113,58 +125,8 @@ const absl::flat_hash_map<std::string, callback_t> user_command_map = {
     STATIC_REGISTER_USER_COMMAND("part", BuiltinCommandPart, 1, 1),
     STATIC_REGISTER_USER_COMMAND("load", BuiltinCommandLoadPlugin, 1, 1),
     STATIC_REGISTER_USER_COMMAND("unload", BuiltinCommandUnloadPlugin, 1, 1),
-    STATIC_REGISTER_USER_COMMAND("help", BuiltinCommandHelp, 0, 0),
+    STATIC_REGISTER_USER_COMMAND("help", BuiltinCommandHelp, 0, 1),
 };
-
-// UserCommandPlugin
-
-bool UserCommandPlugin::OpenHandle(std::string_view name) {
-  struct RAII {
-    char *ptr = get_current_dir_name();
-    ~RAII() { free(ptr); }
-  } r;
-  if (r.ptr) {
-    std::string cwd(r.ptr);
-    cwd.append("/lib").append(name).append(".so");
-    if (cwd.size() > PATH_MAX) {
-      return false;
-    } else {
-      handle = dlopen(cwd.c_str(), RTLD_LAZY);
-      if (handle != nullptr) {
-        return true;
-      } else {
-        PLOG(ERROR) << "Failed to load plugin";
-        return false;
-      }
-    }
-  }
-  return false;
-}
-
-namespace {
-
-UserCommandPlugin::registration_callback_t GetFunc(void *handle, std::string_view symbol) {
-  (void)dlerror();
-  auto sym = dlsym(handle, symbol.data());
-  if (sym) {
-    return reinterpret_cast<UserCommandPlugin::registration_callback_t>(sym);
-  } else {
-    LOG(ERROR) << (dlerror() ?: "Symbol not found");
-    return nullptr;
-  }
-}
-
-}  // namespace
-
-UserCommandPlugin::registration_callback_t UserCommandPlugin::GetRegistrationFunc(
-    std::string_view plugin_name) {
-  return GetFunc(handle, std::string("RegisterPluginCommands_").append(plugin_name));
-}
-
-UserCommandPlugin::registration_callback_t UserCommandPlugin::GetDeletionFunc(
-    std::string_view plugin_name) {
-  return GetFunc(handle, std::string("DeletePluginCommands_").append(plugin_name));
-}
 
 }  // namespace UserCommand
 }  // namespace kbot

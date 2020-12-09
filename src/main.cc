@@ -1,11 +1,11 @@
 #include <glog/logging.h>
 #include <unistd.h>
 
+#include <Manager.hh>
+#include <Server.hh>
 #include <cstdio>
 #include <iostream>
-#include <loop.hh>
 #include <memory>
-#include <server.hh>
 #include <stdexcept>
 #include <thread>
 

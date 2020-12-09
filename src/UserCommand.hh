@@ -5,8 +5,8 @@
 #include <linux/limits.h>
 #include <unistd.h>
 
-#include <irc.hh>
-#include <loop.hh>
+#include <IRC.hh>
+#include <Manager.hh>
 #include <memory>
 #include <string>
 #include <string_view>

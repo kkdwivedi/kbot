@@ -5,9 +5,9 @@
 #include <glog/logging.h>
 
 #include <Database.hh>
+#include <IRC.hh>
 #include <atomic>
 #include <cstdint>
-#include <irc.hh>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -53,14 +53,11 @@ constexpr const char *const ChannelStateStringTable[ChannelStateMax] = {
 struct Channel;
 class Manager;
 
-namespace UserCommand {
-
-// UserCommand Plugins
+// CommandPlugin
 // These are automatically ref-counted, so each server user just needs to keep the Plugin object
-// alive for itself while it's loaded, mapped to its internal user_command_map. This is in this
-// header due to the interdependencies.
+// alive for itself while it's loaded, mapped to its internal user_command_map.
 
-class UserCommandPlugin {
+class CommandPlugin {
   void *handle = nullptr;
 
   void CloseHandle() {
@@ -70,24 +67,23 @@ class UserCommandPlugin {
   }
 
  public:
-  UserCommandPlugin() = default;
-  UserCommandPlugin(UserCommandPlugin &) = delete;
-  UserCommandPlugin &operator=(UserCommandPlugin &) = delete;
-  UserCommandPlugin(UserCommandPlugin &&u) { std::swap(handle, u.handle); }
-  UserCommandPlugin &operator=(UserCommandPlugin &&u) {
+  CommandPlugin() = default;
+  CommandPlugin(CommandPlugin &) = delete;
+  CommandPlugin &operator=(CommandPlugin &) = delete;
+  CommandPlugin(CommandPlugin &&u) { std::swap(handle, u.handle); }
+  CommandPlugin &operator=(CommandPlugin &&u) {
     dlclose(handle);
     handle = std::exchange(u.handle, nullptr);
     return *this;
   }
-  ~UserCommandPlugin() { CloseHandle(); }
+  ~CommandPlugin() { CloseHandle(); }
 
   using registration_callback_t = void (*)(void *);
   bool OpenHandle(std::string_view name);
   registration_callback_t GetRegistrationFunc(std::string_view plugin_name);
   registration_callback_t GetDeletionFunc(std::string_view plugin_name);
+  registration_callback_t GetHelpFunc(std::string_view plugin_name);
 };
-
-}  // namespace UserCommand
 
 class Server : public IRC {
   std::atomic<ServerState> state = ServerState::kSetup;
@@ -104,8 +100,8 @@ class Server : public IRC {
  public:
   std::shared_mutex user_command_mtx;
   absl::flat_hash_map<std::string, callback_t> user_command_map;
-  std::mutex user_command_plugin_map_mtx;
-  absl::flat_hash_map<std::string, UserCommand::UserCommandPlugin> user_command_plugin_map;
+  std::shared_mutex plugins_map_mtx;
+  absl::flat_hash_map<std::string, CommandPlugin> plugins_map;
 
   explicit Server(int sockfd, std::string address, uint16_t port, const char *nickname)
       : IRC(sockfd), address(std::move(address)), port(port), nickname(nickname) {}
