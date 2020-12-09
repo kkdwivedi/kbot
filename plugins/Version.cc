@@ -10,6 +10,14 @@
 
 namespace {
 
+void PluginVersion(kbot::Manager &m, const kbot::IRCMessagePrivMsg &msg) {
+  kbot::UserCommand::SendInvokerReply(m, msg, VERSION_STRING);
+}
+
+std::pair<std::string, kbot::UserCommand::callback_t> command_map[] = {
+    STATIC_REGISTER_USER_COMMAND("version", PluginVersion, 0, 0),
+};
+
 std::mutex server_set_mtx;
 absl::flat_hash_set<kbot::Server *> server_set;
 
@@ -36,10 +44,7 @@ extern "C" {
 void RegisterPluginCommands_version(void *p) {
   assert(p);
   auto s = static_cast<kbot::Server *>(p);
-  bool r =
-      s->AddPluginCommands("version", [](kbot::Manager &m, const kbot::IRCMessagePrivMsg &msg) {
-        kbot::UserCommand::SendInvokerReply(m, msg, VERSION_STRING);
-      });
+  bool r = s->AddPluginCommands(command_map[0].first, command_map[0].second);
   if (r) {
     LOG(INFO) << "Successfully registered plugin commands";
     AddServerToSet(s);
@@ -51,7 +56,7 @@ void RegisterPluginCommands_version(void *p) {
 void DeletePluginCommands_version(void *p) {
   assert(p);
   auto s = static_cast<kbot::Server *>(p);
-  if (s->RemovePluginCommands("version")) {
+  if (s->RemovePluginCommands(command_map[0].first)) {
     RemoveServerFromSet(s);
   }
 }

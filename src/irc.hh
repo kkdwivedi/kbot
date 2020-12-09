@@ -43,11 +43,13 @@ class IRC {
   explicit IRC(int sockfd);
   IRC(const IRC &) = delete;
   IRC &operator=(IRC &) = delete;
-  IRC(IRC &&i) {
-    fd = i.fd;
-    i.fd = -1;
+  IRC(IRC &&i) { fd = std::exchange(i.fd, -1); }
+  IRC &operator=(IRC &&i) {
+    if (this != &i) {
+      fd = std::exchange(i.fd, -1);
+    }
+    return *this;
   }
-  IRC &operator=(IRC &&) = delete;
   virtual ~IRC();
   // Static Methods
   static constexpr const char *StateToString(const enum IRCService s);

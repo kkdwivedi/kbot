@@ -126,6 +126,20 @@ bool Manager::DeleteSignalEvent(int signal) {
   return true;
 }
 
+// ServerThreadSet
+// Implements a collection that allows waiting for completion of all server threads from the main
+// thread, and insertion of new threads to the existing set.
+
+void ServerThreadSet::WaitAll() {
+  std::unique_lock lock(thread_set_mtx);
+  thread_set_cv.wait(lock, [this] { return thread_set.empty(); });
+}
+
+bool ServerThreadSet::InsertNewThread(std::jthread &&jthr) {
+  std::unique_lock lock(thread_set_mtx);
+  return thread_set.insert({jthr.get_id(), std::move(jthr)}).second;
+}
+
 namespace {
 
 void BuiltinPong(Manager &m, const IRCMessage &msg) {
@@ -221,10 +235,24 @@ bool ProcessMessageLine(Manager &m, std::string_view line) try {
   return true;
 } catch (std::runtime_error &e) {
   LOG(INFO) << "Caught IRCMessage exception: (" << e.what() << ")";
-  return false;
+  return true;
 }
 
 void WorkerRun(Manager m) {
+  struct CleanupSelf {
+    ~CleanupSelf() {
+      auto &s = server_thread_set;
+      std::unique_lock lock(s.thread_set_mtx);
+      auto it = s.thread_set.find(std::this_thread::get_id());
+      assert(it != s.thread_set.end());
+      // Detach ourselves
+      it->second.detach();
+      s.thread_set.erase(it);
+      if (s.thread_set.size() == 0) {
+        s.thread_set_cv.notify_all();
+      }
+    }
+  } cleanup_self;
   LOG(INFO) << "Main loop for Server: ";
   auto mgr = io::EpollManager::CreateNew();
   if (mgr) {
@@ -234,7 +262,7 @@ void WorkerRun(Manager m) {
         [&mm = m, &r](struct epoll_event) {
           std::string msg(mm.server.RecvMsg());
           if (msg == "") return;
-          std::vector<std::string_view> tok = TokenizeMessageMultiple(msg);
+          auto tok = TokenizeMessageMultiple(msg);
           for (auto &line : tok) {
             r = ProcessMessageLine(mm, line);
           }

@@ -71,8 +71,9 @@ void BuiltinCommandLoadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
     std::unique_lock lock(m.server.user_command_plugin_map_mtx);
     m.server.user_command_plugin_map.insert(
         {std::string(plugin_name), UserCommandPlugin{std::move(u)}});
+    SendInvokerReply(m, msg, std::string("Loaded ").append(plugin_name));
   } else {
-    LOG(ERROR) << "Failed to load plugin";
+    SendInvokerReply(m, msg, "Failed to load plugin.");
   }
 }
 
@@ -86,13 +87,21 @@ void BuiltinCommandUnloadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
     del_func(&m.server);
     LOG(INFO) << "Successfully unloaded plugin";
     m.server.user_command_plugin_map.erase(it);
+    SendInvokerReply(m, msg, std::string("Unloaded ").append(plugin_name));
   } else {
     SendInvokerReply(m, msg, "No such plugin loaded.");
   }
 }
 
 void BuiltinCommandHelp(Manager &m, const IRCMessagePrivMsg &msg) {
-  SendInvokerReply(m, msg, "Commands available: hi, join, part, load, unload, help");
+  SendInvokerReply(m, msg, "Commands available: ,hi ,join ,part ,load ,unload ,help");
+  std::unique_lock lock(m.server.user_command_mtx);
+  std::string plugin_list("Plugin commands available: ");
+  for (auto &p : m.server.user_command_map) {
+    plugin_list.append(p.first.substr(1)).append(" ");
+  }
+  lock.unlock();
+  SendInvokerReply(m, msg, plugin_list);
 }
 
 }  // namespace

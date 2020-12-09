@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <Database.hh>
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
@@ -23,14 +24,27 @@ namespace kbot {
 // Server
 
 // Move support is only for initial setup (and move into Manager instance)
-// Do not call in multithreaded context, things WILL break, no mutex are held
+// Do not call in multithreaded context, things WILL break, no mutexes are held
 Server::Server(Server &&s)
     : IRC(static_cast<IRC &&>(s)),
       address(std::move(s.address)),
       chan_map(std::move(s.chan_map)),
-      nickname(std::move(s.nickname)) {
-  state.store(s.state.load(std::memory_order_relaxed), std::memory_order_relaxed);
+      nickname(std::move(s.nickname)),
+      local_db(std::move(s.local_db)) {
+  assert(s.state.load(std::memory_order_relaxed) == ServerState::kSetup);
   port = s.port;
+}
+
+// Likewise, don't move Server around except when setting things up
+Server &Server::operator=(Server &&s) {
+  assert(s.state.load(std::memory_order_relaxed) == ServerState::kSetup);
+  static_cast<IRC &>(*this) = static_cast<IRC &&>(s);
+  address = std::move(s.address);
+  chan_map = std::move(s.chan_map);
+  nickname = std::move(s.nickname);
+  local_db = std::move(s.local_db);
+  port = s.port;
+  return *this;
 }
 
 void Server::DumpInfo() {
@@ -126,13 +140,12 @@ bool Server::PartChannel(std::string_view channel) {
 bool Server::AddPluginCommands(std::string_view name, Server::callback_t callback) {
   assert(callback);
   std::unique_lock lock(user_command_mtx);
-  return user_command_map.insert({std::string(":,").append(name), callback}).second;
+  return user_command_map.insert({std::string(name), callback}).second;
 }
 
 bool Server::RemovePluginCommands(std::string_view name) {
   std::unique_lock lock(user_command_mtx);
-  if (auto it = user_command_map.find(std::string(":,").append(name));
-      it != user_command_map.end()) {
+  if (auto it = user_command_map.find(name); it != user_command_map.end()) {
     user_command_map.erase(it);
     return true;
   }

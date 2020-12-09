@@ -78,15 +78,23 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  auto server_opt = kbot::ConnectionNew(address, port, nickname);
-  if (server_opt.has_value() == false) {
-    LOG(INFO) << "Failed to establish connection to server";
-    usage();
+  std::optional<kbot::Server> server_opt;
+  try {
+    // Database constructor can throw
+    server_opt = kbot::ConnectionNew(address, port, nickname);
+    if (server_opt.has_value() == false) {
+      LOG(INFO) << "Failed to establish connection to server";
+      usage();
+      return 1;
+    }
+  } catch (std::runtime_error &e) {
+    LOG(ERROR) << "Aborting: " << e.what();
     return 1;
   }
-  auto root = kbot::LaunchServerThread(
+  kbot::LaunchServerThread(
       [nickname, password, channel](kbot::Server &&server) {
         auto m = kbot::Manager::CreateNew(std::move(server));
+        m.server.SetState(kbot::ServerState::kConnected);
         auto r = m.server.Login(nickname, password);
         if (r < 0) {
           PLOG(ERROR) << "Login failed";
@@ -99,7 +107,7 @@ int main(int argc, char *argv[]) {
       },
       std::move(server_opt.value()));
 
-  root.join();
+  kbot::server_thread_set.WaitAll();
   LOG(INFO) << "Shutting down";
   return 0;
 }

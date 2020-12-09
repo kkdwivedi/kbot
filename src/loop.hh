@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <condition_variable>
 #include <deque>
 #include <epoll.hh>
 #include <mutex>
@@ -30,7 +31,7 @@ class Manager {
   int sigfd = -1;
   sigset_t cur_set;
   absl::flat_hash_map<int, std::function<void(struct signalfd_siginfo &)>> signalfd_sig_map;
-  absl::flat_hash_map<int, std::function<void(int)>> timerfd_set;
+  absl::flat_hash_map<int, std::function<void(int)>> timerfd_map;
 
   static inline std::atomic<int> sigId = SIGRTMIN;
 
@@ -81,13 +82,33 @@ concept ServerThreadCallable = requires (T t, Args...) {
 };
 // clang-format on
 
+class ServerThreadSet {
+  absl::flat_hash_map<std::jthread::id, std::jthread> thread_set;
+  std::mutex thread_set_mtx;
+  std::condition_variable thread_set_cv;
+
+ public:
+  ServerThreadSet() = default;
+  ServerThreadSet(ServerThreadSet &) = delete;
+  ServerThreadSet &operator=(ServerThreadSet &) = delete;
+  ServerThreadSet(ServerThreadSet &&) = delete;
+  ServerThreadSet &operator=(ServerThreadSet &&) = delete;
+  ~ServerThreadSet() = default;
+
+  void WaitAll();
+  bool InsertNewThread(std::jthread &&jthr);
+  friend void WorkerRun(Manager m);
+};
+
+inline ServerThreadSet server_thread_set;
+
 template <class Callable, class... Args>
-requires ServerThreadCallable<Callable, Args...> std::jthread LaunchServerThread(
-    Callable &&thread_main, Args &&...args) {
+requires ServerThreadCallable<Callable, Args...> void LaunchServerThread(Callable &&thread_main,
+                                                                         Args &&...args) {
   // TODO: handling of exceptions thrown by thread_main
   // TODO: cancellation support
-  std::jthread worker(std::forward<Callable>(thread_main), std::forward<Args>(args)...);
-  return worker;
+  server_thread_set.InsertNewThread(
+      std::jthread(std::forward<Callable>(thread_main), std::forward<Args>(args)...));
 }
 
 void WorkerRun(Manager m);

@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 #include <glog/logging.h>
 
+#include <Database.hh>
 #include <atomic>
 #include <cstdint>
 #include <irc.hh>
@@ -18,7 +19,7 @@
 namespace kbot {
 
 enum class ServerState {
-  kDisconnected,
+  kSetup,
   kConnected,
   kLoggedIn,
   kFailed,
@@ -75,8 +76,7 @@ class UserCommandPlugin {
   UserCommandPlugin(UserCommandPlugin &&u) { std::swap(handle, u.handle); }
   UserCommandPlugin &operator=(UserCommandPlugin &&u) {
     dlclose(handle);
-    handle = nullptr;
-    std::swap(handle, u.handle);
+    handle = std::exchange(u.handle, nullptr);
     return *this;
   }
   ~UserCommandPlugin() { CloseHandle(); }
@@ -90,13 +90,14 @@ class UserCommandPlugin {
 }  // namespace UserCommand
 
 class Server : public IRC {
-  std::atomic<ServerState> state = ServerState::kDisconnected;
+  std::atomic<ServerState> state = ServerState::kSetup;
   std::string address;
   uint16_t port;
   std::shared_mutex chan_mtx;
   absl::flat_hash_map<std::string, Channel> chan_map;
   std::mutex nick_mtx;
   std::string nickname;
+  db::Database local_db;
 
   using callback_t = void (*)(Manager &, const IRCMessagePrivMsg &);
 
@@ -111,7 +112,7 @@ class Server : public IRC {
   Server(const Server &) = delete;
   Server &operator=(const Server &) = delete;
   Server(Server &&);
-  Server &operator=(Server &&) = delete;
+  Server &operator=(Server &&);
   ~Server() { IRC::Quit("Goodbye cruel world!"); }
   // Static Methods
   static constexpr const char *StateToString(const enum ServerState state) {

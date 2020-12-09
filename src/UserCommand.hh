@@ -22,7 +22,7 @@ namespace UserCommand {
 #define ARGS_MAX 1024
 
 #define STATIC_REGISTER_USER_COMMAND(command, callback, min, max) \
-  { ":" COMMAND_PREFIX command, &UserCommandForward<min, max, &callback> }
+  { ":" COMMAND_PREFIX command, &kbot::UserCommand::UserCommandForward<min, max, &callback> }
 
 using callback_t = void (*)(Manager &, const IRCMessagePrivMsg &);
 
