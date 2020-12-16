@@ -26,28 +26,11 @@ enum class ServerState {
   kMax,
 };
 
-enum class ChannelState {
-  kMember,
-  kVoiced,
-  kHalfOp,
-  kOp,
-  kOwner,
-  kInvalid,
-  kMax,
-};
-
-constexpr int ServerStateMax = static_cast<int>(ServerState::kMax);
-constexpr int ChannelStateMax = static_cast<int>(ChannelState::kMax);
-
-constexpr const char *const ServerStateStringTable[ServerStateMax] = {
-    "Disconnected",
-    "Logged In",
+constexpr const char *const ServerStateStringTable[(int)ServerState::kMax] = {
+    "Uninitialized",
     "Connected",
+    "Logged In",
     "Failed",
-};
-
-constexpr const char *const ChannelStateStringTable[ChannelStateMax] = {
-    "Member", "Voiced", "HalfOperator", "Operator", "Owner", "Invalid",
 };
 
 struct Channel;
@@ -68,8 +51,8 @@ class CommandPlugin {
 
  public:
   CommandPlugin() = default;
-  CommandPlugin(CommandPlugin &) = delete;
-  CommandPlugin &operator=(CommandPlugin &) = delete;
+  CommandPlugin(const CommandPlugin &) = delete;
+  CommandPlugin &operator=(const CommandPlugin &) = delete;
   CommandPlugin(CommandPlugin &&u) { std::swap(handle, u.handle); }
   CommandPlugin &operator=(CommandPlugin &&u) {
     dlclose(handle);
@@ -86,6 +69,7 @@ class CommandPlugin {
 };
 
 class Server : public IRC {
+  std::mutex server_mtx;
   std::atomic<ServerState> state = ServerState::kSetup;
   std::string address;
   uint16_t port;
@@ -148,10 +132,8 @@ class Server : public IRC {
   std::string GetTopic(std::string_view channel);
   bool PartChannel(std::string_view channel);
   // Plugin API
-  bool AddPluginCommands(std::string_view name, callback_t);
-  bool AddPluginCommands(std::span<std::pair<std::string_view, callback_t>> commands);
-  bool RemovePluginCommands(std::string_view name);
-  bool RemovePluginCommands(std::span<std::string_view> commands);
+  void AddPluginCommands(std::span<const std::pair<std::string, callback_t>> commands);
+  void RemovePluginCommands(std::span<const std::string_view> commands);
 };
 
 struct Channel {

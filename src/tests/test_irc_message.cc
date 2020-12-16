@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <irc.hh>
+#include <IRC.hh>
 #include <stdexcept>
 #include <string_view>
 #include <vector>

@@ -95,7 +95,7 @@ void BuiltinCommandHelp(Manager &m, const IRCMessagePrivMsg &msg) {
   auto v = msg.GetUserCommandParameters();
   if (v.size()) {
     std::shared_lock lock(m.server.plugins_map_mtx);
-    auto it = m.server.plugins_map.find(std::string(":,").append(v[0]));
+    auto it = m.server.plugins_map.find(v[0]);
     if (it != m.server.plugins_map.end()) {
       auto p = std::make_pair(&m, &msg);
       it->second.GetHelpFunc(v[0])(&p);

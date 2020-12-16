@@ -194,20 +194,16 @@ bool Server::PartChannel(std::string_view channel) {
 // Ensure that read lock is not held for the map when calling these methods, especially if the call
 // is not punted to the workqueue
 
-bool Server::AddPluginCommands(std::string_view name, Server::callback_t callback) {
-  assert(callback);
+void Server::AddPluginCommands(std::span<const std::pair<std::string, Server::callback_t>> sp) {
   std::unique_lock lock(user_command_mtx);
-  return user_command_map.insert({std::string(name), callback}).second;
+  user_command_map.insert(sp.begin(), sp.end());
 }
 
-bool Server::RemovePluginCommands(std::string_view name) {
+void Server::RemovePluginCommands(std::span<const std::string_view> sp) {
   std::unique_lock lock(user_command_mtx);
-  if (auto it = user_command_map.find(name); it != user_command_map.end()) {
-    user_command_map.erase(it);
-    return true;
+  for (auto &sv : sp) {
+    user_command_map.erase(sv);
   }
-  LOG(ERROR) << "Command " << name << " not found, cannot remove for server " << GetAddress();
-  return false;
 }
 
 namespace {

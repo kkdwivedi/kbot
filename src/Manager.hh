@@ -48,8 +48,7 @@ class Manager {
   Manager(const Manager &) = delete;
   Manager &operator=(const Manager &) = delete;
   Manager(Manager &&m) : epm(std::move(m.epm)), server(std::move(m.server)) {
-    sigfd = m.sigfd;
-    m.sigfd = -1;
+    sigfd = std::exchange(m.sigfd, -1);
   }
   Manager &operator=(Manager &&) = delete;
   ~Manager() {
@@ -82,12 +81,11 @@ concept ServerThreadCallable = requires (T t, Args...) {
 };
 // clang-format on
 
-class ServerThreadSet {
+struct ServerThreadSet {
   absl::flat_hash_map<std::jthread::id, std::jthread> thread_set;
   std::mutex thread_set_mtx;
   std::condition_variable thread_set_cv;
 
- public:
   ServerThreadSet() = default;
   ServerThreadSet(ServerThreadSet &) = delete;
   ServerThreadSet &operator=(ServerThreadSet &) = delete;
@@ -97,7 +95,6 @@ class ServerThreadSet {
 
   void WaitAll();
   bool InsertNewThread(std::jthread &&jthr);
-  friend void WorkerRun(Manager m);
 };
 
 inline ServerThreadSet server_thread_set;
@@ -110,6 +107,24 @@ requires ServerThreadCallable<Callable, Args...> void LaunchServerThread(Callabl
   server_thread_set.InsertNewThread(
       std::jthread(std::forward<Callable>(thread_main), std::forward<Args>(args)...));
 }
+
+// RAII wrapper that handles cleanup of the thread's entry from the global set
+
+struct ThreadCleanupSelf {
+  ~ThreadCleanupSelf() {
+    auto &s = kbot::server_thread_set;
+    std::unique_lock lock(s.thread_set_mtx);
+    auto it = s.thread_set.find(std::this_thread::get_id());
+    // TODO: investigate crash
+    assert(it != s.thread_set.end());
+    // Detach ourselves, as we're going to die soon anyway
+    it->second.detach();
+    s.thread_set.erase(it);
+    if (s.thread_set.size() == 0) {
+      s.thread_set_cv.notify_all();
+    }
+  }
+};
 
 void WorkerRun(Manager m);
 

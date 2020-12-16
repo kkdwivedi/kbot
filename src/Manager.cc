@@ -154,7 +154,7 @@ void BuiltinNickname(Manager &m, const IRCMessageNick &msg) {
 }
 
 void BuiltinJoin(Manager &m, const IRCMessageJoin &msg) {
-  DLOG(INFO) << "Join request completion received for" << msg.GetChannel();
+  DLOG(INFO) << "Join request completion received for " << msg.GetChannel();
   m.server.UpdateJoinChannel(msg.GetChannel());
 }
 
@@ -234,11 +234,12 @@ bool ProcessMessageLine(Manager &m, std::string_view line) try {
   std::visit(Visitor{m}, mv);
   return true;
 } catch (std::runtime_error &e) {
-  LOG(INFO) << "Caught IRCMessage exception: (" << e.what() << ")";
+  LOG(INFO) << "Malformed IRCMessage exception: (" << e.what() << ")";
   return true;
 }
 
 void WorkerRun(Manager m) {
+  m.server.SetState(kbot::ServerState::kConnected);
   struct CleanupSelf {
     ~CleanupSelf() {
       auto &s = server_thread_set;

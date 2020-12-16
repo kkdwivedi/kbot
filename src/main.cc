@@ -93,8 +93,8 @@ int main(int argc, char *argv[]) {
   }
   kbot::LaunchServerThread(
       [nickname, password, channel](kbot::Server &&server) {
+        kbot::ThreadCleanupSelf _;
         auto m = kbot::Manager::CreateNew(std::move(server));
-        m.server.SetState(kbot::ServerState::kConnected);
         auto r = m.server.Login(nickname, password);
         if (r < 0) {
           PLOG(ERROR) << "Login failed";

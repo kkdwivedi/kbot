@@ -6,5 +6,6 @@ CMakeFiles
 CTestTestfile.cmake
 Testing
 test_*
+kbot
 cmake_install.cmake
 compile_commands.json

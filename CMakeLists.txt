@@ -7,23 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -Wall -Wextra -Wno-gnu-zero-variadic-macro-arguments -fsanitize=address,undefined")
 
-add_executable(kbot src/epoll.cc src/irc.cc src/loop.cc src/UserCommand.cc src/server.cc src/main.cc)
-add_library(version SHARED plugins/Version.cc src/irc.cc src/server.cc src/UserCommand.cc)
-add_executable(test_irc_message src/tests/test_irc_message.cc)
+include_directories(src)
 
+add_executable(kbot src/main.cc src/Database.cc src/Server.cc src/Manager.cc src/Epoll.cc src/IRC.cc src/UserCommand.cc)
+add_library(version SHARED plugins/Version.cc src/IRC.cc src/Server.cc src/Database.cc src/UserCommand.cc)
+add_executable(test_irc_message src/tests/test_irc_message.cc src/IRC.cc)
 
 find_package(absl REQUIRED)
 
-target_link_libraries(kbot absl::flat_hash_map)
-target_link_libraries(kbot glog pthread dl)
-target_include_directories(kbot PUBLIC "src/")
+target_link_libraries(kbot PUBLIC absl::flat_hash_map)
+target_link_libraries(kbot PUBLIC glog pthread dl sqlite3)
 
-target_link_libraries(version absl::flat_hash_set)
-target_link_libraries(version glog pthread dl)
-target_include_directories(version PUBLIC "src/")
+target_link_libraries(version PUBLIC absl::flat_hash_set)
+target_link_libraries(version PUBLIC glog pthread dl)
 
-target_link_libraries(test_irc_message gtest glog)
-target_include_directories(test_irc_message PUBLIC "src/")
+target_link_libraries(test_irc_message PUBLIC gtest glog)
 
 add_custom_target(plugins)
 add_dependencies(plugins version)
