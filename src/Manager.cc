@@ -240,20 +240,6 @@ bool ProcessMessageLine(Manager &m, std::string_view line) try {
 
 void WorkerRun(Manager m) {
   m.server.SetState(kbot::ServerState::kConnected);
-  struct CleanupSelf {
-    ~CleanupSelf() {
-      auto &s = server_thread_set;
-      std::unique_lock lock(s.thread_set_mtx);
-      auto it = s.thread_set.find(std::this_thread::get_id());
-      assert(it != s.thread_set.end());
-      // Detach ourselves
-      it->second.detach();
-      s.thread_set.erase(it);
-      if (s.thread_set.size() == 0) {
-        s.thread_set_cv.notify_all();
-      }
-    }
-  } cleanup_self;
   LOG(INFO) << "Main loop for Server: ";
   auto mgr = io::EpollManager::CreateNew();
   if (mgr) {

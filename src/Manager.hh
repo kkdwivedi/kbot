@@ -115,7 +115,6 @@ struct ThreadCleanupSelf {
     auto &s = kbot::server_thread_set;
     std::unique_lock lock(s.thread_set_mtx);
     auto it = s.thread_set.find(std::this_thread::get_id());
-    // TODO: investigate crash
     assert(it != s.thread_set.end());
     // Detach ourselves, as we're going to die soon anyway
     it->second.detach();

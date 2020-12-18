@@ -8,6 +8,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -Wall -Wextra -Wno-gnu-zero-variadic-macro-arguments -fsanitize=address,undefined")
 
 include_directories(src)
+include_directories(plugins)
 
 add_executable(kbot src/main.cc src/Database.cc src/Server.cc src/Manager.cc src/Epoll.cc src/IRC.cc src/UserCommand.cc)
 add_library(version SHARED plugins/Version.cc src/IRC.cc src/Server.cc src/Database.cc src/UserCommand.cc)
