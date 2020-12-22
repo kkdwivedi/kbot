@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -32,8 +33,7 @@ bool CommandPlugin::OpenHandle(std::string_view name) {
     ~RAII() { free(ptr); }
   } r;
   if (r.ptr) {
-    std::string cwd(r.ptr);
-    cwd.append("/lib").append(name).append(".so");
+    std::string cwd = fmt::format("{}/lib{}.so", r.ptr, name);
     if (cwd.size() > PATH_MAX) {
       return false;
     } else {
@@ -66,16 +66,16 @@ CommandPlugin::registration_callback_t GetFunc(void *handle, std::string_view sy
 
 CommandPlugin::registration_callback_t CommandPlugin::GetRegistrationFunc(
     std::string_view plugin_name) {
-  return GetFunc(handle, std::string("RegisterPluginCommands_").append(plugin_name));
+  return GetFunc(handle, fmt::format("RegisterPluginCommands_{}", plugin_name));
 }
 
 CommandPlugin::registration_callback_t CommandPlugin::GetDeletionFunc(
     std::string_view plugin_name) {
-  return GetFunc(handle, std::string("DeletePluginCommands_").append(plugin_name));
+  return GetFunc(handle, fmt::format("DeletePluginCommands_{}", plugin_name));
 }
 
 CommandPlugin::registration_callback_t CommandPlugin::GetHelpFunc(std::string_view plugin_name) {
-  return GetFunc(handle, std::string("HelpPluginCommands_").append(plugin_name));
+  return GetFunc(handle, fmt::format("HelpPluginCommands_{}", plugin_name));
 }
 
 // Server

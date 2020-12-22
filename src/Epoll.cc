@@ -32,27 +32,12 @@ EpollManager &EpollManager::operator=(EpollManager &&m) {
 }
 
 EpollManager::~EpollManager() {
-  for (auto &ctx : static_events) {
-    if (ctx.type == EpollStaticEvent::Type::Exit) {
-      ctx.cb(ctx);
-    }
+  for (auto &ctx : static_events.exit) {
+    ctx.cb(*this);
   }
   if (fd >= 0) {
     close(fd);
   }
-}
-
-std::optional<EpollManager> EpollManager::CreateNew() {
-  int fd = epoll_create1(EPOLL_CLOEXEC);
-  if (fd < 0) {
-    return std::nullopt;
-  }
-  return EpollManager{fd};
-}
-
-void EpollManager::RegisterStaticEvent(EpollStaticEvent::Type type,
-                                       std::function<void(EpollStaticEvent &)> cb) {
-  static_events.push_back(EpollStaticEvent{type, std::move(cb)});
 }
 
 bool EpollManager::RegisterFd(int fd, EventFlags events,
@@ -176,13 +161,11 @@ bool EpollManager::DeleteFd(int fd) {
 }
 
 int EpollManager::RunEventLoop(int timeout = 0) {
-  for (auto &ctx : static_events) {
-    if (ctx.type == EpollStaticEvent::Type::Pre) {
-      ctx.cb(ctx);
-    }
+  for (auto &ctx : static_events.pre) {
+    ctx.cb(*this);
   }
 
-  static std::vector<struct epoll_event> events_vec;
+  thread_local static std::vector<struct epoll_event> events_vec;
   events_vec.resize(fd_map.size());
 
   for (;;) {
@@ -198,11 +181,8 @@ int EpollManager::RunEventLoop(int timeout = 0) {
     assert(r);
     for (size_t i = 0; i < (size_t)r; i++) {
       auto it = fd_map.find(events_vec[i].data.fd);
-      if (it == fd_map.end()) {
-        // fd is not in map, but being polled, something is borked...
-        errno = ENOENT;
-        return r = -1;
-      } else if (it->second.enabled) {
+      assert(it != fd_map.end());
+      if (it->second.enabled) {
         it->second.cb(events_vec[i]);
       }
     }
@@ -210,10 +190,8 @@ int EpollManager::RunEventLoop(int timeout = 0) {
     break;
   }
 
-  for (auto &ctx : static_events) {
-    if (ctx.type == EpollStaticEvent::Type::Post) {
-      ctx.cb(ctx);
-    }
+  for (auto &ctx : static_events.post) {
+    ctx.cb(*this);
   }
 
   return 0;

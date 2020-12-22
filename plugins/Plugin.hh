@@ -69,8 +69,8 @@ void DeleteCallbackImpl(
 
 [[maybe_unused]] inline void HelpCallbackImpl(
     void *p, const absl::flat_hash_map<std::string, const char *> &command_help_map) {
-  assert(p);
-  auto s = static_cast<std::pair<kbot::Manager *, kbot::IRCMessagePrivMsg *> *>(p);
+  assert(p != nullptr);
+  auto s = static_cast<std::pair<kbot::Manager *, const kbot::IRCMessagePrivMsg *> *>(p);
   kbot::UserCommand::SendInvokerReply(*s->first, *s->second,
                                       command_help_map.at(s->second->GetUserCommand().substr(1)));
 }

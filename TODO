@@ -3,19 +3,13 @@ Priority
 * Synchronize with a command sent to the server
 * sd_notify/Run as a service
 * Restart without downtime
-* Event loop to integrate various event sources
+* Land thread annotations for MT
 
 Future
 --
 * Rethink getaddrinfo
-* Dumpable in-memory DB (or perhaps use sqlite3)
 * CGroup based resource management for plugins (requires delegation)
 * Explore io_uring
-
-Cleanups
---------
-* Audit insert calls
-* Heterogenous Lookups
 
 Plugins
 --

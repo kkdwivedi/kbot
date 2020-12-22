@@ -22,56 +22,27 @@
 
 namespace kbot {
 
+using io::EpollManager;
+
 // NOTE: Make sure createNew is called in context of thread owning
 // the instance. This essentially means that copying or moving this
 // instance across threads has broken semantics. Threads owning these
 // instances handle all signals through the respective signalfd anyway.
-class Manager {
-  io::EpollManager epm;
-  int sigfd = -1;
-  sigset_t cur_set;
-  absl::flat_hash_map<int, std::function<void(struct signalfd_siginfo &)>> signalfd_sig_map;
-  absl::flat_hash_map<int, std::function<void(int)>> timerfd_map;
-
-  static inline std::atomic<int> sigId = SIGRTMIN;
-
-  explicit Manager(io::EpollManager &&epm, Server &&server, int curSigId)
-      : epm(std::move(epm)), server(std::move(server)) {
-    sigemptyset(&cur_set);
-    sigaddset(&cur_set, curSigId);
-  }
-  bool InitializeSignalFd();
+class Manager : public EpollManager {
+  explicit Manager(int fd, Server &&server) : EpollManager(fd), server(std::move(server)) {}
 
  public:
   Server server;
 
   Manager(const Manager &) = delete;
   Manager &operator=(const Manager &) = delete;
-  Manager(Manager &&m) : epm(std::move(m.epm)), server(std::move(m.server)) {
-    sigfd = std::exchange(m.sigfd, -1);
-  }
-  Manager &operator=(Manager &&) = delete;
-  ~Manager() {
-    if (sigfd >= 0) {
-      epm.DeleteFd(sigfd);
-      close(sigfd);
-    }
-    sigId.fetch_sub(1, std::memory_order_relaxed);
-  }
+  Manager(Manager &&m) = default;
+  Manager &operator=(Manager &&) = default;
+  ~Manager() = default;
 
   static Manager CreateNew(Server &&server);
-  // Signal Events
-  bool RegisterSignalEvent(int signal, std::function<void(struct signalfd_siginfo &)> handler);
-  bool DeleteSignalEvent(int signal);
-  // Timer Events
-  int RegisterTimerEvent(int clockid, std::function<void(int)> handler);
-  bool RearmTimerEvent(int timerfd);
-  bool DisarmTimerEvent(int timerfd);
-  bool DeleteTimerEvent(int timerfd);
-  // Generic
-  bool RegisterChildEvent(int pidfd);
-
-  void RunEventLoop();
+  static void SetupSignalDelivery(std::string_view server_name);
+  static void TearDownSignalDelivery();
 };
 
 // clang-format off
@@ -87,8 +58,8 @@ struct ServerThreadSet {
   std::condition_variable thread_set_cv;
 
   ServerThreadSet() = default;
-  ServerThreadSet(ServerThreadSet &) = delete;
-  ServerThreadSet &operator=(ServerThreadSet &) = delete;
+  ServerThreadSet(const ServerThreadSet &) = delete;
+  ServerThreadSet &operator=(const ServerThreadSet &) = delete;
   ServerThreadSet(ServerThreadSet &&) = delete;
   ServerThreadSet &operator=(ServerThreadSet &&) = delete;
   ~ServerThreadSet() = default;

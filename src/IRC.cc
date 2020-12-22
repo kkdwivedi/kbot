@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <poll.h>
 #include <string.h>
@@ -31,8 +32,7 @@ constexpr const char *IRC::StateToString(enum IRCService s) {
 
 ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
   ssize_t fail = 0;
-  std::string buf;
-  buf.append("\rUSER ").append(nickname).append(" 0 * :").append(nickname).append("\r\n");
+  std::string buf = fmt::format("\rUSER {} 0 * :{}\r\n", nickname, nickname);
   auto r = SendMsg(buf);
   if (r < 0) {
     PLOG(ERROR) << "Failed to send USER LOGIN message";
@@ -44,7 +44,7 @@ ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
     fail = r;
   }
   if (password != "") {
-    r = PrivMsg("NickServ", std::string("identify ") += password);
+    r = PrivMsg("NickServ", fmt::format("identify {}", password));
     if (r < 0) PLOG(ERROR) << "Failed to send IDENTIFY LOGIN message";
     fail = r;
   }
@@ -52,32 +52,28 @@ ssize_t IRC::Login(std::string_view nickname, std::string_view password) const {
 }
 
 ssize_t IRC::Nick(std::string_view nickname) const {
-  std::string buf;
-  buf.append("\rNICK ").append(nickname).append("\r\n");
+  std::string buf = fmt::format("\rNICK {}\r\n", nickname);
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send NICK message";
   return r;
 }
 
 ssize_t IRC::Join(std::string_view channel) const {
-  std::string buf;
-  buf.append("\rJOIN ").append(channel).append("\r\n");
+  std::string buf = fmt::format("\rJOIN {}\r\n", channel);
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send JOIN message";
   return r;
 }
 
 ssize_t IRC::Part(std::string_view channel) const {
-  std::string buf;
-  buf.append("\rPART ").append(channel).append("\r\n");
+  std::string buf = fmt::format("\rPART {}\r\n", channel);
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send PART message";
   return r;
 }
 
 ssize_t IRC::PrivMsg(std::string_view recipient, std::string_view msg) const {
-  std::string buf;
-  buf.append("\rPRIVMSG ").append(recipient).append(" :").append(msg).append("\r\n");
+  std::string buf = fmt::format("\rPRIVMSG {} :{}\r\n", recipient, msg);
   auto r = SendMsg(buf);
   if (r < 0) PLOG(ERROR) << "Failed to send PRIVMSG message";
   return r;
@@ -85,8 +81,7 @@ ssize_t IRC::PrivMsg(std::string_view recipient, std::string_view msg) const {
 
 ssize_t IRC::Quit(std::string_view msg) const {
   if (fd >= 0) {
-    std::string buf;
-    buf.append("\rQUIT :").append(msg).append("\r\n");
+    std::string buf = fmt::format("\rQUIT {}\r\n", msg);
     auto r = SendMsg(buf);
     if (r < 0) {
       PLOG(ERROR) << "Failed to send QUIT message";

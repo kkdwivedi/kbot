@@ -1,3 +1,4 @@
+#include <absl/container/flat_hash_map.h>
 #include <errno.h>
 #include <sys/epoll.h>
 
@@ -10,18 +11,19 @@
 namespace kbot {
 namespace io {
 
+enum class StaticEventType {
+  Pre,
+  Post,
+  Exit,
+};
+
+class EpollManager;
+
+template <StaticEventType type>
 struct EpollStaticEvent {
-  enum class Type {
-    Pre = 0,
-    Post = 1,
-    Exit = 2,
-  } type;
-  explicit EpollStaticEvent(Type type, std::function<void(EpollStaticEvent &self)> cb)
-      : type(type), cb(std::move(cb)) {}
-  void PreEnable() { type = Type::Pre; }
-  void PostEnable() { type = Type::Post; }
-  void ExitEnable() { type = Type::Exit; }
-  std::function<void(EpollStaticEvent &self)> cb;
+  std::function<void(EpollManager &)> cb;
+
+  explicit EpollStaticEvent(std::function<void(EpollManager &)> cb) : cb(std::move(cb)) {}
 };
 
 struct EpollContext {
@@ -30,29 +32,23 @@ struct EpollContext {
   bool enabled;
 
   uint32_t GetConfigMask() {
-    uint32_t mask = 0;
-    if (ev.events & EPOLLET) mask |= EPOLLET;
-    if (ev.events & EPOLLONESHOT) mask |= EPOLLONESHOT;
-    if (ev.events & EPOLLWAKEUP) mask |= EPOLLWAKEUP;
-    if (ev.events & EPOLLEXCLUSIVE) mask |= EPOLLEXCLUSIVE;
-    return mask;
+    return ev.events & (EPOLLET | EPOLLONESHOT | EPOLLWAKEUP | EPOLLEXCLUSIVE);
   }
-  uint32_t GetEventMask() {
-    uint32_t mask = 0;
-    if (ev.events & EPOLLIN) mask |= EPOLLIN;
-    if (ev.events & EPOLLOUT) mask |= EPOLLOUT;
-    if (ev.events & EPOLLRDHUP) mask |= EPOLLRDHUP;
-    if (ev.events & EPOLLPRI) mask |= EPOLLPRI;
-    return mask;
-  }
+  uint32_t GetEventMask() { return ev.events & (EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLPRI); }
 };
 
 class EpollManager {
   int fd = -1;
-  std::map<int, EpollContext> fd_map;
-  std::vector<EpollStaticEvent> static_events;
+  absl::flat_hash_map<int, EpollContext> fd_map;
+  struct {
+    std::vector<EpollStaticEvent<StaticEventType::Pre>> pre;
+    std::vector<EpollStaticEvent<StaticEventType::Post>> post;
+    std::vector<EpollStaticEvent<StaticEventType::Exit>> exit;
+  } static_events;
 
+ protected:
   explicit EpollManager(int fd) : fd(fd) {}
+  ~EpollManager();
 
  public:
   using userdata_un = decltype(epoll_event{}.data);
@@ -79,11 +75,9 @@ class EpollManager {
   EpollManager &operator=(const EpollManager &) = delete;
   EpollManager(EpollManager &&);
   EpollManager &operator=(EpollManager &&);
-  ~EpollManager();
 
-  static std::optional<EpollManager> CreateNew();
-  void RegisterStaticEvent(EpollStaticEvent::Type type,
-                           std::function<void(EpollStaticEvent &self)> cb);
+  template <StaticEventType type>
+  void RegisterStaticEvent(std::function<void(EpollManager &)> cb);
   bool RegisterFd(int fd, EventFlags events, std::function<void(struct epoll_event)> callback,
                   ConfigFlags config);
   bool EnableFd(int fd);
@@ -94,6 +88,17 @@ class EpollManager {
   bool DeleteFd(int fd);
   int RunEventLoop(int timeout);
 };
+
+template <StaticEventType type>
+void EpollManager::RegisterStaticEvent(std::function<void(EpollManager &)> cb) {
+  if constexpr (type == StaticEventType::Pre) {
+    static_events.pre.push_back(EpollStaticEvent<type>{std::move(cb)});
+  } else if constexpr (type == StaticEventType::Post) {
+    static_events.post.push_back(EpollStaticEvent<type>{std::move(cb)});
+  } else if constexpr (type == StaticEventType::Exit) {
+    static_events.exit.push_back(EpollStaticEvent<type>{std::move(cb)});
+  }
+}
 
 }  // namespace io
 }  // namespace kbot

@@ -1,5 +1,6 @@
 #include <absl/container/flat_hash_map.h>
 #include <dlfcn.h>
+#include <fmt/format.h>
 
 #include <IRC.hh>
 #include <Manager.hh>
@@ -20,7 +21,7 @@ void SendInvokerReply(Manager &m, const IRCMessagePrivMsg &msg, std::string_view
     // Private buffer
     recv = u.nickname;
   }
-  m.server.SendChannel(recv, std::string(msg.GetUser().nickname).append(": ").append(reply));
+  m.server.SendChannel(recv, fmt::format("{}: {}", msg.GetUser().nickname, reply));
 }
 
 bool InvokerPermissionCheck(Manager &m, const IRCMessagePrivMsg &msg, IRCUserCapability mask) {
@@ -70,7 +71,7 @@ void BuiltinCommandLoadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
     LOG(INFO) << "Successfully loaded plugin";
     std::unique_lock lock(m.server.plugins_map_mtx);
     m.server.plugins_map.insert({std::string(plugin_name), CommandPlugin{std::move(u)}});
-    SendInvokerReply(m, msg, std::string("Loaded ").append(plugin_name));
+    SendInvokerReply(m, msg, fmt::format("Loaded {}", plugin_name));
   } else {
     SendInvokerReply(m, msg, "Failed to load plugin.");
   }
@@ -85,7 +86,7 @@ void BuiltinCommandUnloadPlugin(Manager &m, const IRCMessagePrivMsg &msg) {
     del_func(&m.server);
     LOG(INFO) << "Successfully unloaded plugin";
     m.server.plugins_map.erase(it);
-    SendInvokerReply(m, msg, std::string("Unloaded ").append(plugin_name));
+    SendInvokerReply(m, msg, fmt::format("Unloaded {}", plugin_name));
   } else {
     SendInvokerReply(m, msg, "No such plugin loaded.");
   }
@@ -103,7 +104,7 @@ void BuiltinCommandHelp(Manager &m, const IRCMessagePrivMsg &msg) {
       SendInvokerReply(m, msg, "No such plugin loaded.");
     }
   } else {
-    SendInvokerReply(m, msg, "Commands available: ,hi ,nick ,join ,part ,load ,unload");
+    SendInvokerReply(m, msg, "Commands available: ,hi ,nick ,join ,part ,load ,unload ,quit ,help");
     std::string plugin_list;
     {
       std::unique_lock lock(m.server.user_command_mtx);

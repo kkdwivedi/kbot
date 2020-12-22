@@ -50,7 +50,6 @@ class IRC {
     }
     return *this;
   }
-  virtual ~IRC();
   // Static Methods
   static constexpr const char *StateToString(const enum IRCService s);
   // Command API
@@ -65,6 +64,9 @@ class IRC {
   std::string RecvMsg() const;
   // Friends/Misc
   friend std::ostream &operator<<(std::ostream &o, const IRC &i);
+
+ protected:
+  ~IRC();
 };
 
 // User record for IRC messages not from the server
@@ -164,18 +166,9 @@ class IRCMessage {
 
   IRCMessage(const IRCMessage &) = delete;
   IRCMessage &operator=(IRCMessage &) = delete;
-  IRCMessage(IRCMessage &&m) {
-    message_type = m.message_type;
-    m.message_type = IRCMessageType::_DEFAULT;
-    line = std::move(m.line);
-    tags = std::move(m.tags);
-    tag_kv = std::move(m.tag_kv);
-    source = std::move(m.source);
-    command = std::move(m.command);
-    param_vec = std::move(m.param_vec);
-  }
+  IRCMessage(IRCMessage &&) = default;
   IRCMessage &operator=(IRCMessage &&) = delete;
-  virtual ~IRCMessage() = default;
+  ~IRCMessage() = default;
 
   std::string_view GetTags() const { return tags; }
 

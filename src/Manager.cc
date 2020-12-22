@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <poll.h>
 #include <sys/signalfd.h>
@@ -21,109 +22,46 @@
 
 namespace kbot {
 
+static std::atomic<int> sig_id = SIGRTMIN;
+
+void Manager::SetupSignalDelivery(std::string_view server_name) {
+  int cur_sig_id;
+  // The CAS is uncontended almost all the time
+  do {
+    cur_sig_id = sig_id.load(std::memory_order_relaxed);
+    if (cur_sig_id == SIGRTMAX) {
+      LOG(WARNING) << "Signal IDs exhausted, skipping delivery setup";
+      return;
+    }
+  } while (!sig_id.compare_exchange_strong(cur_sig_id, cur_sig_id + 1, std::memory_order_relaxed,
+                                           std::memory_order_relaxed));
+  sigset_t set;
+  sigfillset(&set);
+  sigdelset(&set, cur_sig_id);
+  if (pthread_sigmask(SIG_BLOCK, &set, nullptr)) {
+    PLOG(WARNING) << "Failed to setup signal mask";
+  }
+
+  std::string name = fmt::format("{}-{}", cur_sig_id - SIGRTMIN, server_name);
+  if (name.size() > 15) {
+    // Requires length of thread name to be capped at 16 (including '\0')
+    name.erase(15);
+  }
+  if (pthread_setname_np(pthread_self(), name.c_str())) {
+    PLOG(WARNING) << "Failed to set thread name";
+    return;
+  }
+}
+
+void Manager::TearDownSignalDelivery() { sig_id.fetch_sub(1, std::memory_order_relaxed); }
+
 // Manager
-
 Manager Manager::CreateNew(Server &&server) {
-  auto epm = io::EpollManager::CreateNew();
-  if (epm.has_value()) {
-    auto curSigId = sigId.fetch_add(1, std::memory_order_relaxed);
-    if (curSigId > SIGRTMAX) {
-      sigId.fetch_sub(1, std::memory_order_relaxed);
-      throw std::runtime_error("No more Manager instances can be created, signal ID exhausted.");
-    }
-
-    sigset_t set;
-    sigfillset(&set);
-    sigdelset(&set, curSigId);
-    // Eww, maybe there's a better way to do this crap?
-    if (pthread_sigmask(SIG_BLOCK, &set, nullptr)) {
-      throw std::runtime_error("Failed to setup signal mask.");
-    }
-
-    std::string name = std::to_string(curSigId - SIGRTMIN);
-    name.append("-").append(server.GetAddress());
-    if (name.size() > 15) {
-      // Requires length of thread name is capped at 16 (including '\0')
-      name.erase(15);
-    }
-    if (pthread_setname_np(pthread_self(), name.c_str())) {
-      throw std::runtime_error("Failed to set thread name.");
-    }
-
-    return Manager{std::move(*epm), std::move(server), curSigId};
-  } else {
-    throw std::runtime_error("Failed to create EpollManager instance.");
+  int fd = epoll_create1(EPOLL_CLOEXEC);
+  if (fd < 0) {
+    throw std::runtime_error("Failed to create epoll fd");
   }
-}
-
-bool Manager::InitializeSignalFd() {
-  assert(sigfd == -1);
-  sigfd = signalfd(sigfd, &cur_set, SFD_NONBLOCK | SFD_CLOEXEC);
-  if (sigfd < 0) {
-    return false;
-  } else {
-    auto dispatcher = [this](struct epoll_event ev) {
-      assert(ev.events & EPOLLIN);
-      assert(ev.data.fd == sigfd);
-
-      struct signalfd_siginfo si;
-      for (;;) {
-        // Consume everything until we get EAGAIN
-        // TODO: can optimize this to buffer many in one go
-        auto r = read(sigfd, &si, sizeof(si));
-        if (r < 0) {
-          if (errno == EAGAIN) {
-            return;
-          } else {
-            PLOG(ERROR) << "Failed to consume signal from signalfd";
-            return;
-          }
-        }
-        auto it = signalfd_sig_map.find(static_cast<int>(si.ssi_signo));
-        assert(it != signalfd_sig_map.end());
-        it->second(si);
-      }
-    };
-    epm.RegisterFd(sigfd, io::EpollManager::EpollIn, dispatcher,
-                   io::EpollManager::EpollConfigDefault);
-    return true;
-  }
-}
-
-bool Manager::RegisterSignalEvent(int signal,
-                                  std::function<void(struct signalfd_siginfo &)> handler) {
-  if (sigfd == -1) {
-    sigaddset(&cur_set, signal);
-    if (InitializeSignalFd()) {
-      return true;
-    } else {
-      sigdelset(&cur_set, signal);
-      return false;
-    }
-  }
-
-  if (sigismember(&cur_set, signal)) {
-    return true;
-  } else {
-    sigaddset(&cur_set, signal);
-    int r = signalfd(sigfd, &cur_set, 0);
-    if (r < 0) {
-      sigdelset(&cur_set, signal);
-      return false;
-    }
-    signalfd_sig_map[signal] = std::move(handler);
-    return true;
-  }
-}
-
-bool Manager::DeleteSignalEvent(int signal) {
-  if (sigismember(&cur_set, signal) == false) {
-    return false;
-  }
-  auto it = signalfd_sig_map.find(signal);
-  assert(it != signalfd_sig_map.end());
-  signalfd_sig_map.erase(it);
-  return true;
+  return Manager(fd, std::move(server));
 }
 
 // ServerThreadSet
@@ -144,7 +82,7 @@ namespace {
 
 void BuiltinPong(Manager &m, const IRCMessage &msg) {
   LOG(INFO) << "Received PING, replying with PONG to " << msg.GetParameters()[0];
-  m.server.SendMsg("PONG :" + std::string(msg.GetParameters()[0].substr(1, std::string::npos)));
+  m.server.SendMsg(fmt::format("PONG :{}", msg.GetParameters()[0].substr(1)));
 }
 
 void BuiltinNickname(Manager &m, const IRCMessageNick &msg) {
@@ -239,9 +177,14 @@ bool ProcessMessageLine(Manager &m, std::string_view line) try {
 }
 
 void WorkerRun(Manager m) {
-  m.server.SetState(kbot::ServerState::kConnected);
+  m.server.SetState(ServerState::kConnected);
+  Manager::SetupSignalDelivery(m.server.GetAddress());
+  struct Cleanup {
+    ~Cleanup() { Manager::TearDownSignalDelivery(); }
+  } _;
   LOG(INFO) << "Main loop for Server: ";
-  auto mgr = io::EpollManager::CreateNew();
+  // TODO;
+  io::EpollManager *mgr = static_cast<io::EpollManager *>(&m);
   if (mgr) {
     bool r = true;
     mgr->RegisterFd(
